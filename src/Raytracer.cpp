@@ -1,4 +1,4 @@
-﻿#define GLFW_INCLUDE_VULKAN
+﻿#include <vulkan/vulkan_raii.hpp>
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS
@@ -8,28 +8,69 @@
 
 #include <iostream>
 
-int main() {
-    glfwInit();
+constexpr uint32_t WIDTH = 800;
+constexpr uint32_t HEIGHT = 600;
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Vulkan window", nullptr, nullptr);
-
-    uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-
-    std::cout << extensionCount << " extensions supported\n";
-
-    glm::mat4 matrix;
-    glm::vec4 vec;
-    auto test = matrix * vec;
-
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
+class Application {
+public:
+    void Run() {
+        Init();
+        MainLoop();
+        CleanUp();
+    }
+private:
+    void Init() {
+        InitWindow();
+        InitVulkan();
     }
 
-    glfwDestroyWindow(window);
+    void InitWindow() {
+        glfwInit();
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        m_Window = glfwCreateWindow(WIDTH, HEIGHT, "Application", nullptr, nullptr);
+    }
 
-    glfwTerminate();
+    void InitVulkan() {
+        constexpr vk::ApplicationInfo appInfo{
+            .pApplicationName = "Application",
+            .applicationVersion = VK_MAKE_VERSION(1,0,0),
+            .pEngineName = "No Engine",
+            .engineVersion = VK_MAKE_VERSION(1,0,0),
+            .apiVersion = vk::ApiVersion14
+        };
+        vk::InstanceCreateInfo createInfo{
+            .pApplicationInfo = &appInfo
+        };
+        m_Instance = vk::raii::Instance(m_Context, createInfo);
+    }
 
-    return 0;
+    void MainLoop() {
+        while (!glfwWindowShouldClose(m_Window)) {
+            glfwPollEvents();
+        }
+    }
+
+    void CleanUp() {
+        glfwDestroyWindow(m_Window);
+        glfwTerminate();
+    }
+
+    GLFWwindow* m_Window;
+    vk::raii::Context m_Context;
+    vk::raii::Instance m_Instance = nullptr;
+};
+
+int main() {
+    Application app;
+
+    try {
+        app.Run();
+    }
+    catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }
