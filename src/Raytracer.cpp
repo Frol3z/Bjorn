@@ -21,8 +21,7 @@ constexpr bool enableValidationLayers = false;
 constexpr bool enableValidationLayers = true;
 #endif
 
-// TODO: move extensions and layers stuff to dedicated functions
-
+// TODO: Refactor class in dedicated header file and cpp file
 class Application {
 public:
     void Run() {
@@ -45,6 +44,8 @@ private:
 
     void InitVulkan() {
         CreateInstance();
+        SelectPhysicalDevice();
+        CreateLogicalDevice();
     }
 
     void CreateInstance() {
@@ -57,6 +58,7 @@ private:
             .apiVersion = vk::ApiVersion14
         };
 
+        // TODO: move extensions and layers listing to dedicated functions that can be turned on and off
         // List available instance layers
         auto layerProperties = m_Context.enumerateInstanceLayerProperties();
         std::cout << "Available instance layer:" << std::endl;
@@ -119,6 +121,136 @@ private:
         }
     }
 
+    void SelectPhysicalDevice() {
+        auto devices = m_Instance.enumeratePhysicalDevices();        
+        
+        if (devices.empty()) {
+            throw std::runtime_error("Failed to find GPUs with Vulkan support!");
+        }
+        
+        // List available devices
+        std::cout << "Available devices:" << std::endl;
+        for (const auto& device : devices) {
+            // If it is useful to query for raytracing property keep using VkPhysicalDeviceProperties2
+            // else revert to VkPhysicalDeviceProperties
+            auto deviceProperties = device.getProperties2();
+
+            // Other queriable stuff if ever needed
+            //auto deviceFeatures = device.getFeatures2();
+            //auto extensions = device.enumerateDeviceExtensionProperties();
+            //auto queueFamilyProperties = device.getQueueFamilyProperties();
+
+            // Device properties
+            std::cout << '\t' << "Name: " << deviceProperties.properties.deviceName << std::endl;
+            std::cout << '\t' << "API version: " << deviceProperties.properties.apiVersion << std::endl;
+            std::cout << '\t' << "Driver version: " << deviceProperties.properties.driverVersion << std::endl;
+            std::cout << '\t' << "Vendor ID: " << deviceProperties.properties.vendorID << std::endl;
+            std::cout << '\t' << "ID: " << deviceProperties.properties.deviceID << std::endl;
+
+            switch (deviceProperties.properties.deviceType) {
+                case vk::PhysicalDeviceType::eOther: {
+                    std::cout << '\t' << "Type: " << "Other" << std::endl;
+                    break;
+                }
+                case vk::PhysicalDeviceType::eIntegratedGpu: {
+                    std::cout << '\t' << "Type: " << "Integrated GPU" << std::endl;
+                    break;
+                }
+                case vk::PhysicalDeviceType::eDiscreteGpu: {
+                    std::cout << '\t' << "Type: " << "Discrete GPU" << std::endl;
+                    break;
+                }
+                case vk::PhysicalDeviceType::eVirtualGpu: {
+                    std::cout << '\t' << "Type: " << "Virtual GPU" << std::endl;
+                    break;
+                }
+                case vk::PhysicalDeviceType::eCpu: {
+                    std::cout << '\t' << "Type: " << "CPU" << std::endl;
+                    break;
+                }
+            }
+            
+            /*
+                std::cout << '\t' << "Supported extensions:" << std::endl;
+                for (const auto& extension : extensions) {
+                    std::cout << "\t\t - " << extension.extensionName << std::endl;
+                }
+            */
+            
+            // Check for suitability (TODO: properly check for raytracing extensions support)
+            bool isSuitable = device.getProperties().apiVersion >= VK_API_VERSION_1_4;
+            if (isSuitable) {
+                m_PhysicalDevice = device;
+                break;
+            }
+        }
+    }
+
+    void CreateLogicalDevice() {
+        // Get index of the first queue family with graphics support
+        auto queueFamilyProperties = m_PhysicalDevice.getQueueFamilyProperties();
+        auto graphicsQueueFamilyProperty = std::find_if(queueFamilyProperties.begin(), queueFamilyProperties.end(),
+            [](vk::QueueFamilyProperties const& qfp) {
+                return qfp.queueFlags & vk::QueueFlagBits::eGraphics;
+            });
+        auto graphicsQueueFamilyIndex = static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
+        
+        // DeviceQueueCreateInfo
+        float queuePriority = 1.0;
+        vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ 
+            .queueFamilyIndex = graphicsQueueFamilyIndex,
+            .queueCount = 1,
+            .pQueuePriorities = &queuePriority
+        };
+
+        // Create a chain of feature structures to enable multiple new features (on top of those of VK 1.0) all at once
+        vk::StructureChain<
+            vk::PhysicalDeviceFeatures2,
+            vk::PhysicalDeviceVulkan13Features,
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
+            featureChain = {
+                {},
+                {.dynamicRendering = true},
+                {.extendedDynamicState = true}
+        };
+
+        // Required device extensions
+        std::vector<const char*> deviceExtensions = {
+            // Mandatory extension for presenting framebuffer on a window
+            vk::KHRSwapchainExtensionName,
+            
+            // Vulkan tutorial extensions (I guess I'll understand what they are here for, at some point)
+            vk::KHRSpirv14ExtensionName,
+            vk::KHRSynchronization2ExtensionName,
+            vk::KHRCreateRenderpass2ExtensionName,
+            
+            // Raytracing extensions
+            vk::KHRAccelerationStructureExtensionName,
+            vk::KHRDeferredHostOperationsExtensionName, // Required by the extension above
+            vk::KHRRayTracingPipelineExtensionName,
+            vk::KHRRayQueryExtensionName
+        };
+
+        // Device creation
+        vk::DeviceCreateInfo deviceCreateInfo{
+            .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
+            .queueCreateInfoCount = 1,
+            .pQueueCreateInfos = &deviceQueueCreateInfo,
+            .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
+            .ppEnabledExtensionNames = deviceExtensions.data(),
+        };
+
+        try {
+            m_Device = vk::raii::Device(m_PhysicalDevice, deviceCreateInfo);
+        }
+        catch (const vk::SystemError& err) {
+            std::cerr << "Vulkan error: " << err.what() << std::endl;
+        }
+
+        // Get graphics queue reference
+        m_GraphicsQueue = vk::raii::Queue(m_Device, graphicsQueueFamilyIndex, 0);
+    }
+
     void MainLoop() {
         while (!glfwWindowShouldClose(m_Window)) {
             glfwPollEvents();
@@ -130,9 +262,14 @@ private:
         glfwTerminate();
     }
 
-    GLFWwindow* m_Window;
+    GLFWwindow* m_Window = nullptr;
+
     vk::raii::Context m_Context;
     vk::raii::Instance m_Instance = nullptr;
+    
+    vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
+    vk::raii::Device m_Device = nullptr;
+    vk::raii::Queue m_GraphicsQueue = nullptr;
 };
 
 int main() {
