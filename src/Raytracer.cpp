@@ -7,6 +7,8 @@
 #include <glm/mat4x4.hpp>
 
 #include <iostream>
+#include <fstream>
+#include <filesystem>
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
@@ -60,6 +62,7 @@ private:
         CreateLogicalDevice();
         CreateSwapChain();
         CreateImageViews();
+        CreateGraphicsPipeline();
     }
 
     void CreateInstance() {
@@ -342,6 +345,25 @@ private:
         }
     }
 
+    void CreateGraphicsPipeline() {
+        // Create shader module
+        auto shaderPath = std::filesystem::current_path() / "shaders/slang.spv";
+        vk::raii::ShaderModule shaderModule = CreateShaderModule(ReadFile(shaderPath.string()));
+
+        // ShaderStageCreateInfo
+        vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eVertex,
+            .module = shaderModule,
+            .pName = "vertMain"
+        };
+        vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eFragment,
+            .module = shaderModule,
+            .pName = "fragMain"
+        };
+        vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+    }
+
     // SwapChain stuff
     vk::SurfaceFormatKHR ChooseSwapChainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
         for (const auto& availableFormat : availableFormats) {
@@ -372,6 +394,31 @@ private:
             std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
             std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
         };
+    }
+
+    // Utilities
+    static std::vector<char> ReadFile(const std::string& filename) {
+        // Read starting from the end to determine the size of the file
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open file!");
+        }
+
+        std::vector<char> buffer(file.tellg());
+        file.seekg(0, std::ios::beg);
+        file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        file.close();
+
+        return buffer;
+    }
+
+    [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const {
+        vk::ShaderModuleCreateInfo createInfo{
+            .codeSize = code.size() * sizeof(char),
+            .pCode = reinterpret_cast<const uint32_t*>(code.data())
+        };
+        vk::raii::ShaderModule shaderModule(m_Device, createInfo);
+        return shaderModule;
     }
 
     GLFWwindow* m_Window = nullptr;

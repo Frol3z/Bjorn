@@ -1,6 +1,8 @@
 ﻿cmake_minimum_required(VERSION 3.8)
 project(Raytracer)
 
+include(${CMAKE_SOURCE_DIR}/cmake/Shaders.cmake)
+
 # Enable C++20
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,4 +71,16 @@ target_link_libraries(Raytracer
     Vulkan::cppm
     glfw
     glm::glm
+)
+
+# Shader dependencies
+set (SHADER_SLANG_SOURCES ${CMAKE_SOURCE_DIR}/shaders/shader.slang)
+
+add_slang_shader_target(Shaders SOURCES ${SHADER_SLANG_SOURCES})
+add_dependencies(Raytracer Shaders)
+
+# Copy resources to the build folder
+add_custom_command(
+    TARGET Raytracer POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/shaders $<TARGET_FILE_DIR:Raytracer>/shaders
 )
