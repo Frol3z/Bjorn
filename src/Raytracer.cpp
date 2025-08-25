@@ -239,7 +239,7 @@ private:
         vk::StructureChain<
             vk::PhysicalDeviceFeatures2,
             vk::PhysicalDeviceVulkan13Features,
-            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> // To be able to change dinamically some pipeline properties
             featureChain = {
                 {},
                 {.dynamicRendering = true},
@@ -256,6 +256,7 @@ private:
             vk::KHRSpirv14ExtensionName,
             vk::KHRSynchronization2ExtensionName,
             vk::KHRCreateRenderpass2ExtensionName,
+            vk::KHRShaderDrawParametersExtensionName, // Required to be able to use SV_VertexID in shader code
             
             // Raytracing extensions
             vk::KHRAccelerationStructureExtensionName,
@@ -362,6 +363,114 @@ private:
             .pName = "fragMain"
         };
         vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+        // VertexInput
+        // TODO: remove hardcoded vertices and provide vertex and index buffers
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+
+        // InputAssembly
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
+            .topology = vk::PrimitiveTopology::eTriangleList
+        };
+
+        /*
+        // Pipeline-baked viewport and scissors
+        vk::Viewport{
+            0.0f,
+            0.0f,
+            static_cast<float>(m_SwapChainExtent.width),
+            static_cast<float>(m_SwapChainExtent.height),
+            0.0f,
+            1.0f
+        };
+
+        vk::Rect2D{
+            vk::Offset2D{ 0, 0 },
+            m_SwapChainExtent
+        };
+        */
+
+        // Dynamic viewport and scissors (will be set in the command buffer)
+        std::vector dynamicStates = {
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eScissor
+        };
+        vk::PipelineDynamicStateCreateInfo dynamicState{ 
+            .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()), 
+            .pDynamicStates = dynamicStates.data()
+        };
+        // We just need to specify how many there are at pipeline creation time
+        vk::PipelineViewportStateCreateInfo viewportState{ .viewportCount = 1, .scissorCount = 1 };
+
+        // Rasterizer
+        vk::PipelineRasterizationStateCreateInfo rasterizer{ 
+            .depthClampEnable = vk::False, // Clamp out of bound depth values to the near or far plane
+            .rasterizerDiscardEnable = vk::False, // Disable rasterization (no output)
+            .polygonMode = vk::PolygonMode::eFill, // For wireframe mode a GPU feature must be enabled
+            .cullMode = vk::CullModeFlagBits::eBack, // Self explanatory
+            .frontFace = vk::FrontFace::eClockwise, 
+            .depthBiasEnable = vk::False, 
+            .depthBiasSlopeFactor = 1.0f, 
+            .lineWidth = 1.0f 
+        };
+        
+        // MSAA (currently disabled because it requires enabling a GPU feature)
+        vk::PipelineMultisampleStateCreateInfo multisampling{ 
+            .rasterizationSamples = vk::SampleCountFlagBits::e1, 
+            .sampleShadingEnable = vk::False 
+        };
+
+        // Color blending (currently alpha blending is configured for reference but disabled)
+        vk::PipelineColorBlendAttachmentState colorBlendAttachment;
+        colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        colorBlendAttachment.blendEnable = vk::False;
+        colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+        colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
+        colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+        colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+        colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+
+        // Blending with bitwise operations
+        vk::PipelineColorBlendStateCreateInfo colorBlending{ 
+            .logicOpEnable = vk::False, 
+            .logicOp = vk::LogicOp::eCopy, 
+            .attachmentCount = 1, 
+            .pAttachments = &colorBlendAttachment 
+        };
+
+        // Uniforms (not used yet)
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
+            .setLayoutCount = 0,
+            .pushConstantRangeCount = 0
+        };
+        m_PipelineLayout = vk::raii::PipelineLayout(m_Device, pipelineLayoutInfo);
+
+        // PipelineRenderingCreateInfo
+        // It specifies the formats of the attachment used with dynamic rendering
+        vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{ 
+            .colorAttachmentCount = 1, 
+            .pColorAttachmentFormats = &m_SwapChainSurfaceFormat.format 
+        };
+       
+        // GraphicsPipelineCreateInfo
+        vk::GraphicsPipelineCreateInfo pipelineInfo{ 
+            .pNext = &pipelineRenderingCreateInfo,
+            .stageCount = 2, 
+            .pStages = shaderStages,
+            .pVertexInputState = &vertexInputInfo, 
+            .pInputAssemblyState = &inputAssembly,
+            .pViewportState = &viewportState, 
+            .pRasterizationState = &rasterizer,
+            .pMultisampleState = &multisampling, 
+            .pColorBlendState = &colorBlending,
+            .pDynamicState = &dynamicState, 
+            .layout = m_PipelineLayout, 
+            .renderPass = nullptr // Because we are using dynamic rendering
+        };
+
+        // FINALLY!
+        m_GraphicsPipeline = vk::raii::Pipeline(m_Device, nullptr, pipelineInfo);
     }
 
     // SwapChain stuff
@@ -438,6 +547,9 @@ private:
     std::vector<vk::raii::ImageView> m_SwapChainImageViews;
     vk::SurfaceFormatKHR m_SwapChainSurfaceFormat;
     vk::Extent2D m_SwapChainExtent;
+
+    vk::raii::Pipeline m_GraphicsPipeline = nullptr;
+    vk::raii::PipelineLayout m_PipelineLayout = nullptr;
 };
 
 int main() {
