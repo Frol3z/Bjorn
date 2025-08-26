@@ -63,6 +63,8 @@ private:
         CreateSwapChain();
         CreateImageViews();
         CreateGraphicsPipeline();
+        CreateCommandPool();
+        CreateCommandBuffer();
     }
 
     void CreateInstance() {
@@ -284,6 +286,7 @@ private:
         // Get graphics and presentation queue reference
         m_GraphicsQueue = vk::raii::Queue(m_Device, graphicsQueueFamilyIndex, 0);
         m_PresentQueue = vk::raii::Queue(m_Device, presentQueueFamilyIndex, 0);
+        m_GraphicsQueueFamilyIndex = graphicsQueueFamilyIndex;
     }
 
     void CreateSwapChain() {
@@ -473,6 +476,25 @@ private:
         m_GraphicsPipeline = vk::raii::Pipeline(m_Device, nullptr, pipelineInfo);
     }
 
+    void CreateCommandPool() {
+        // CommandPoolCreateInfo
+        vk::CommandPoolCreateInfo poolInfo = {
+            .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+            .queueFamilyIndex = m_GraphicsQueueFamilyIndex
+        };
+        m_CommandPool = vk::raii::CommandPool(m_Device, poolInfo);
+    }
+
+    void CreateCommandBuffer() {
+        // CommandBufferAllocateInfo
+        vk::CommandBufferAllocateInfo allocInfo{
+            .commandPool = m_CommandPool,
+            .level = vk::CommandBufferLevel::ePrimary,
+            .commandBufferCount = 1
+        };
+        m_CommandBuffer = std::move(vk::raii::CommandBuffers(m_Device, allocInfo).front());
+    }
+
     // SwapChain stuff
     vk::SurfaceFormatKHR ChooseSwapChainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
         for (const auto& availableFormat : availableFormats) {
@@ -505,6 +527,71 @@ private:
         };
     }
 
+    // Command buffer stuff
+    void RecordCommandBuffer(uint32_t imageIndex) {
+        // Reset command buffer
+        m_CommandBuffer.begin({});
+
+        // Transition image layout to color attachment
+        TransitionImageLayout(
+            imageIndex,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            {},
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput
+        );
+
+        // Setup color attachment
+        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+        vk::RenderingAttachmentInfo attachmentInfo{
+            .imageView = m_SwapChainImageViews[imageIndex],
+            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = clearColor
+        };
+
+        // Setup rendering info
+        vk::RenderingInfo renderingInfo = {
+            .renderArea = {.offset = { 0, 0 }, .extent = m_SwapChainExtent },
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &attachmentInfo
+        };
+
+        // Begin rendering
+        m_CommandBuffer.beginRendering(renderingInfo);
+
+        // Bind the graphic pipeline (the attachment will be bound to the fragment shader output)
+        m_CommandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_GraphicsPipeline);
+
+        // Set viewport and scissor size (dynamic rendering)
+        m_CommandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(m_SwapChainExtent.width), static_cast<float>(m_SwapChainExtent.height), 0.0f, 1.0f));
+        m_CommandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), m_SwapChainExtent));
+
+        // Draw command
+        m_CommandBuffer.draw(3, 1, 0, 0);
+
+        // Finish up rendering
+        m_CommandBuffer.endRendering();
+
+        // After rendering, transition the swapchain image to PRESENT_SRC
+        TransitionImageLayout(
+            imageIndex,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::ePresentSrcKHR,
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            {},
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::PipelineStageFlagBits2::eBottomOfPipe
+        );
+
+        // Finish recording command onto the buffer
+        m_CommandBuffer.end();
+    }
+
     // Utilities
     static std::vector<char> ReadFile(const std::string& filename) {
         // Read starting from the end to determine the size of the file
@@ -530,6 +617,41 @@ private:
         return shaderModule;
     }
 
+    void TransitionImageLayout(
+        uint32_t imageIndex,
+        vk::ImageLayout oldLayout,
+        vk::ImageLayout newLayout,
+        vk::AccessFlags2 srcAccessMask,
+        vk::AccessFlags2 dstAccessMask,
+        vk::PipelineStageFlags2 srcStageMask,
+        vk::PipelineStageFlags2 dstStageMask
+    ) {
+        vk::ImageMemoryBarrier2 barrier = {
+            .srcStageMask = srcStageMask,
+            .srcAccessMask = srcAccessMask,
+            .dstStageMask = dstStageMask,
+            .dstAccessMask = dstAccessMask,
+            .oldLayout = oldLayout,
+            .newLayout = newLayout,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_SwapChainImages[imageIndex],
+            .subresourceRange = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        };
+        vk::DependencyInfo dependencyInfo = {
+            .dependencyFlags = {},
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &barrier
+        };
+        m_CommandBuffer.pipelineBarrier2(dependencyInfo);
+    }
+
     GLFWwindow* m_Window = nullptr;
 
     vk::raii::Context m_Context;
@@ -539,9 +661,9 @@ private:
     vk::raii::Device m_Device = nullptr;
     vk::raii::Queue m_GraphicsQueue = nullptr;
     vk::raii::Queue m_PresentQueue = nullptr;
+    uint32_t m_GraphicsQueueFamilyIndex;
 
     vk::raii::SurfaceKHR m_Surface = nullptr;
-
     vk::raii::SwapchainKHR m_SwapChain = nullptr;
     std::vector<vk::Image> m_SwapChainImages;
     std::vector<vk::raii::ImageView> m_SwapChainImageViews;
@@ -550,6 +672,9 @@ private:
 
     vk::raii::Pipeline m_GraphicsPipeline = nullptr;
     vk::raii::PipelineLayout m_PipelineLayout = nullptr;
+
+    vk::raii::CommandPool m_CommandPool = nullptr;
+    vk::raii::CommandBuffer m_CommandBuffer = nullptr;
 };
 
 int main() {
