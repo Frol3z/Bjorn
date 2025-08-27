@@ -40,12 +40,62 @@ private:
     void MainLoop() {
         while (!glfwWindowShouldClose(m_Window)) {
             glfwPollEvents();
+            DrawFrame();
         }
+
+        // Wait for pending GPU operations to finish
+        m_Device.waitIdle();
     }
 
     void CleanUp() {
         glfwDestroyWindow(m_Window);
         glfwTerminate();
+    }
+
+    void DrawFrame() {
+        // Wait for presentation of the previous frame to finish
+        // TODO: use one semaphore for each swapchain image to start rendering the next frame before
+        // the previous one has been presented to the screen
+        m_PresentQueue.waitIdle();
+
+        // Acquire next image index and signal the semaphore when done
+        auto [result, imageIndex] = m_SwapChain.acquireNextImage(UINT64_MAX, *m_ImageAvailableSemaphore, nullptr);
+
+        // Record command buffer and reset draw fence
+        RecordCommandBuffer(imageIndex);
+        m_Device.resetFences(*m_DrawFence);
+
+        // Submit commands to the queue
+        vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        const vk::SubmitInfo submitInfo{ 
+            .waitSemaphoreCount = 1, 
+            .pWaitSemaphores = &*m_ImageAvailableSemaphore,
+            .pWaitDstStageMask = &waitDestinationStageMask, 
+            .commandBufferCount = 1, 
+            .pCommandBuffers = &*m_CommandBuffer,
+            .signalSemaphoreCount = 1, 
+            .pSignalSemaphores = &*m_RenderFinishedSemaphore 
+        };
+        m_GraphicsQueue.submit(submitInfo, *m_DrawFence);
+
+        // CPU will wait until the GPU finishes rendering the previous frame
+        while (vk::Result::eTimeout == m_Device.waitForFences(*m_DrawFence, vk::True, UINT64_MAX));
+
+        // Present to the screen
+        const vk::PresentInfoKHR presentInfoKHR{ 
+            .waitSemaphoreCount = 1, 
+            .pWaitSemaphores = &*m_RenderFinishedSemaphore,
+            .swapchainCount = 1, 
+            .pSwapchains = &*m_SwapChain, 
+            .pImageIndices = &imageIndex
+        };
+        result = m_PresentQueue.presentKHR(presentInfoKHR);
+
+        switch (result) {
+            case vk::Result::eSuccess: break;
+            case vk::Result::eSuboptimalKHR: std::cout << "vk::Queue::presentKHR returned vk::Result::eSuboptimalKHR!" << std::endl; break;
+            default: break; // Unexpected result
+        }
     }
 
     void InitWindow() {
@@ -65,6 +115,7 @@ private:
         CreateGraphicsPipeline();
         CreateCommandPool();
         CreateCommandBuffer();
+        CreateSyncObjects();
     }
 
     void CreateInstance() {
@@ -244,7 +295,7 @@ private:
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> // To be able to change dinamically some pipeline properties
             featureChain = {
                 {},
-                {.dynamicRendering = true},
+                {.synchronization2 = true, .dynamicRendering = true},
                 {.extendedDynamicState = true}
         };
 
@@ -495,6 +546,12 @@ private:
         m_CommandBuffer = std::move(vk::raii::CommandBuffers(m_Device, allocInfo).front());
     }
 
+    void CreateSyncObjects() {
+        m_ImageAvailableSemaphore = vk::raii::Semaphore(m_Device, vk::SemaphoreCreateInfo());
+        m_RenderFinishedSemaphore = vk::raii::Semaphore(m_Device, vk::SemaphoreCreateInfo());
+        m_DrawFence = vk::raii::Fence(m_Device, { .flags = vk::FenceCreateFlagBits::eSignaled });
+    }
+
     // SwapChain stuff
     vk::SurfaceFormatKHR ChooseSwapChainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
         for (const auto& availableFormat : availableFormats) {
@@ -675,6 +732,10 @@ private:
 
     vk::raii::CommandPool m_CommandPool = nullptr;
     vk::raii::CommandBuffer m_CommandBuffer = nullptr;
+
+    vk::raii::Semaphore m_ImageAvailableSemaphore = nullptr;
+    vk::raii::Semaphore m_RenderFinishedSemaphore = nullptr;
+    vk::raii::Fence m_DrawFence = nullptr;
 };
 
 int main() {

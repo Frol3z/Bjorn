@@ -16,10 +16,10 @@ struct VertexOutput {
 };
 
 [shader("vertex")]
-VertexOutput vertMain() {
+VertexOutput vertMain(uint vertexId: SV_VertexID) {
     VertexOutput output;
-    output.color = colors[0];
-    output.sv_position = float4(positions[0], 0.0, 1.0);
+    output.color = colors[vertexId];
+    output.sv_position = float4(positions[vertexId], 0.0, 1.0);
     return output;
 }
 
