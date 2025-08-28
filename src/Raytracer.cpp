@@ -64,12 +64,30 @@ private:
         // Wait for the presentation to release the semaphore
         m_PresentQueue.waitIdle();
 
+        // Check if window has been resized/minimize before trying to acquire next image
+        if (m_IsFramebufferResized) {
+            m_IsFramebufferResized = false;
+            RecreateSwapChain();
+            return;
+        }
+
         // Acquire next image index and signal the semaphore when done
         auto [result, imageIndex] = m_SwapChain.acquireNextImage(UINT64_MAX, *m_ImageAvailableSemaphores[m_CurrentFrame], nullptr);
 
+        // Check if the surface is still compatible with the swapchain or if it was resized/minimized
+        // !!! Checking m_IsFramebufferResized guarantees prevents presentation to an invalid surface
+        if (result == vk::Result::eErrorOutOfDateKHR || m_IsFramebufferResized) {
+            m_IsFramebufferResized = false;
+            RecreateSwapChain();
+            return;
+        }
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+            throw std::runtime_error("Failed to acquire swapchain image!");
+        }
+
         // Record command buffer and reset draw fence
-        RecordCommandBuffer(imageIndex);
         m_Device.resetFences(*m_InFlightFences[m_CurrentFrame]);
+        RecordCommandBuffer(imageIndex);
 
         // Submit commands to the queue
         vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -94,10 +112,14 @@ private:
         };
         result = m_PresentQueue.presentKHR(presentInfoKHR);
 
-        switch (result) {
-            case vk::Result::eSuccess: break;
-            case vk::Result::eSuboptimalKHR: std::cout << "vk::Queue::presentKHR returned vk::Result::eSuboptimalKHR!" << std::endl; break;
-            default: break; // Unexpected result
+        // Check again if presentation fails because the surface is now incompatible
+        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_IsFramebufferResized) {
+            m_IsFramebufferResized = false;
+            RecreateSwapChain();
+            return;
+        }
+        else if (result != vk::Result::eSuccess) {
+            throw std::runtime_error("Failed to present swapchain image!");
         }
 
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -106,8 +128,13 @@ private:
     void InitWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
         m_Window = glfwCreateWindow(WIDTH, HEIGHT, "Application", nullptr, nullptr);
+
+
+        glfwSetWindowUserPointer(m_Window, this);
+        // Set callback function when the window gets resized
+        glfwSetFramebufferSizeCallback(m_Window, FramebufferResizeCallback);
     }
 
     void InitVulkan() {
@@ -388,6 +415,28 @@ private:
         m_SwapChainImages = m_SwapChain.getImages();
     }
 
+    void RecreateSwapChain() {
+        // Handling minimization
+        int width = 0, height = 0;
+        glfwGetFramebufferSize(m_Window, &width, &height);
+        while (width == 0 || height == 0) {
+            glfwGetFramebufferSize(m_Window, &width, &height);
+            glfwWaitEvents();
+        }
+        
+        m_Device.waitIdle();
+
+        CleanUpSwapChain();
+
+        CreateSwapChain();
+        CreateImageViews();
+    }
+
+    void CleanUpSwapChain() {
+        m_SwapChainImageViews.clear();
+        m_SwapChain = nullptr;
+    }
+
     void CreateImageViews() {
         m_SwapChainImageViews.clear();
 
@@ -612,7 +661,7 @@ private:
         );
 
         // Setup color attachment
-        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+        vk::ClearValue clearColor = vk::ClearColorValue(0.98f, 0.93f, 0.93f, 1.0f);
         vk::RenderingAttachmentInfo attachmentInfo{
             .imageView = m_SwapChainImageViews[imageIndex],
             .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -720,6 +769,11 @@ private:
         m_CommandBuffers[m_CurrentFrame].pipelineBarrier2(dependencyInfo);
     }
 
+    static void FramebufferResizeCallback(GLFWwindow* window, int width, int height) {
+        auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+        app->m_IsFramebufferResized = true;
+    }
+
     GLFWwindow* m_Window = nullptr;
 
     vk::raii::Context m_Context;
@@ -749,6 +803,7 @@ private:
     std::vector<vk::raii::Fence> m_InFlightFences;
 
     uint32_t m_CurrentFrame = 0;
+    bool m_IsFramebufferResized = false;
 };
 
 int main() {
