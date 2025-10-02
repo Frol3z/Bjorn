@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.8)
+﻿cmake_minimum_required(VERSION 3.10)
 project(Raytracer)
 
 include(${CMAKE_SOURCE_DIR}/cmake/Shaders.cmake)
@@ -62,7 +62,7 @@ FetchContent_MakeAvailable(glm)
 # -----------------------------
 # Build executable
 # -----------------------------
-add_executable(Raytracer "src/Raytracer.cpp")
+add_executable(Raytracer "src/Main.cpp" "src/Window.cpp" "src/Application.cpp")
 
 target_include_directories(Raytracer PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
