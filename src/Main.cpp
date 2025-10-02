@@ -5,7 +5,15 @@
 // ENTRY POINT
 int main() 
 {
-	Bjorn::Application app("My App", 800, 600);
-	app.Run();
+	try {
+		Bjorn::Application app("My App", 800, 600);
+		app.Run();
+	}
+	catch (const std::exception& e) {
+		std::cerr << "Incident happened: " << e.what() << "\n";
+		return EXIT_FAILURE;
+	}
+
 	std::cout << "Done." << std::endl;
+	return EXIT_SUCCESS;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Window.hpp"
+#include "Renderer.hpp"
 
 namespace Bjorn {
 	class Application {
@@ -12,6 +13,7 @@ namespace Bjorn {
 		void Run();
 	private:
 		Window m_window;
+		Renderer m_renderer;
 
 		void Init();
 		void MainLoop();

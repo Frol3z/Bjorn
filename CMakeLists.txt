@@ -62,7 +62,7 @@ FetchContent_MakeAvailable(glm)
 # -----------------------------
 # Build executable
 # -----------------------------
-add_executable(Raytracer "src/Main.cpp" "src/Window.cpp" "src/Application.cpp")
+add_executable(Raytracer "src/Main.cpp" "src/Window.cpp" "src/Application.cpp" "src/Renderer.cpp")
 
 target_include_directories(Raytracer PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
