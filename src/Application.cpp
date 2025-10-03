@@ -12,21 +12,25 @@ namespace Bjorn
 		m_renderer = std::make_unique<Renderer>(name, *m_window);
 	}
 
-	void Application::Run() {
+	void Application::Run() 
+	{
 		Init();
 		MainLoop();
 		CleanUp();
 	}
 
-	void Application::Init() {
+	void Application::Init() 
+	{
 		glfwInit();
 	}
 
-	void Application::MainLoop() {
+	void Application::MainLoop() 
+	{
 		
 	}
 
-	void Application::CleanUp() {
+	void Application::CleanUp() 
+	{
 		glfwTerminate();
 	}
 }

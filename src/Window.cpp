@@ -2,7 +2,8 @@
 
 #include <GLFW/glfw3.h>
 
-namespace Bjorn {
+namespace Bjorn 
+{
 	Window::Window(uint32_t width, uint32_t height, const std::string& title, Application* app) 
         : m_app(app)
     {
@@ -16,11 +17,13 @@ namespace Bjorn {
         glfwSetFramebufferSizeCallback(m_window, FramebufferResizeCallback);
 	}
 
-    Window::~Window() {
+    Window::~Window() 
+    {
         glfwDestroyWindow(m_window);
     }
 
-    void Window::FramebufferResizeCallback(GLFWwindow* window, int width, int height) {
+    void Window::FramebufferResizeCallback(GLFWwindow* window, int width, int height) 
+    {
         auto win = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
         win->m_app->isFramebufferResized = true;
     }

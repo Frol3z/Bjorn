@@ -3,8 +3,10 @@
 #include "Window.hpp"
 #include "Renderer.hpp"
 
-namespace Bjorn {
-	class Application {
+namespace Bjorn 
+{
+	class Application 
+	{
 	public:	
 		bool isFramebufferResized = false;
 		

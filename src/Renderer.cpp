@@ -12,11 +12,13 @@
     constexpr bool enableValidationLayers = true;
 #endif
 
-const std::vector validationLayers = {
+const std::vector validationLayers = 
+{
     "VK_LAYER_KHRONOS_validation"
 };
 
-namespace Bjorn {
+namespace Bjorn 
+{
 	Renderer::Renderer(const std::string& appName, const Window& window)
         : m_appName(appName), m_window(window)
     {
@@ -24,9 +26,12 @@ namespace Bjorn {
         CreateSurface();
         SelectPhysicalDevice();
         CreateLogicalDevice();
+        
+        m_swapchain = std::make_unique<Swapchain>(m_physicalDevice, m_device, m_window, m_surface);
     }
 
-	void Renderer::CreateInstance() {
+	void Renderer::CreateInstance() 
+    {
         // Optional appInfo struct
         const vk::ApplicationInfo appInfo{
             .pApplicationName = m_appName.c_str(),
@@ -105,7 +110,8 @@ namespace Bjorn {
         }
     }
 
-    void Renderer::CreateSurface() {
+    void Renderer::CreateSurface() 
+    {
         VkSurfaceKHR _surface;
         if (glfwCreateWindowSurface(*m_instance, m_window.GetHandle(), nullptr, &_surface) != 0) {
             throw std::runtime_error("Failed to create window surface!");
@@ -113,7 +119,8 @@ namespace Bjorn {
         m_surface = vk::raii::SurfaceKHR(m_instance, _surface);
     }
 
-    void Renderer::SelectPhysicalDevice() {
+    void Renderer::SelectPhysicalDevice() 
+    {
         auto devices = m_instance.enumeratePhysicalDevices();
         if (devices.empty()) {
             throw std::runtime_error("Failed to find GPUs with Vulkan support!");
@@ -179,7 +186,8 @@ namespace Bjorn {
         }
     }
 
-    void Renderer::CreateLogicalDevice() {
+    void Renderer::CreateLogicalDevice() 
+    {
         // Get index of the first queue family with graphics support
         auto queueFamilyProperties = m_physicalDevice.getQueueFamilyProperties();
         auto graphicsQueueFamilyProperty = std::find_if(queueFamilyProperties.begin(), queueFamilyProperties.end(),

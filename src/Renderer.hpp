@@ -2,12 +2,16 @@
 
 #include <vulkan/vulkan_raii.hpp>
 
-namespace Bjorn {
+#include "Swapchain.hpp"
+
+namespace Bjorn 
+{
 
 	// Fwd declaration
 	class Window;
 
-	class Renderer {
+	class Renderer 
+	{
 	public:
 		Renderer(const std::string& appName, const Window& window);
 
@@ -26,6 +30,7 @@ namespace Bjorn {
 		vk::raii::Queue m_presentQueue = nullptr;
 		uint32_t m_graphicsQueueFamilyIndex;
 
+		std::unique_ptr<Swapchain> m_swapchain = nullptr;
 
 		void CreateInstance();
 		void CreateSurface(); // May be moved to swapchain class
@@ -33,18 +38,10 @@ namespace Bjorn {
 		void CreateLogicalDevice();
 
 		/* TODO:
-		void CreateSwapChain();
-		void RecreateSwapChain();
-		void CleanUpSwapChain();
-		void CreateImageViews();
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
 		void CreateCommandBuffer();
 		void CreateSyncObjects();
-
-		vk::SurfaceFormatKHR ChooseSwapChainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-		vk::PresentModeKHR ChooseSwapChainPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-		vk::Extent2D ChooseSwapChainExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
 		void RecordCommandBuffer(uint32_t imageIndex);
 
