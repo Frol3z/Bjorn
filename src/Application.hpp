@@ -12,8 +12,8 @@ namespace Bjorn {
 
 		void Run();
 	private:
-		Window m_window;
-		Renderer m_renderer;
+		std::unique_ptr<Window> m_window;
+		std::unique_ptr<Renderer> m_renderer;
 
 		void Init();
 		void MainLoop();

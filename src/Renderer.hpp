@@ -3,20 +3,36 @@
 #include <vulkan/vulkan_raii.hpp>
 
 namespace Bjorn {
+
+	// Fwd declaration
+	class Window;
+
 	class Renderer {
 	public:
-		Renderer(const std::string& appName);
+		Renderer(const std::string& appName, const Window& window);
 
 	private:
+		const std::string& m_appName;
+
+		const Window& m_window;
+
 		vk::raii::Context m_context;
 		vk::raii::Instance m_instance = nullptr;
+		vk::raii::SurfaceKHR m_surface = nullptr;
+
+		vk::raii::PhysicalDevice m_physicalDevice = nullptr;
+		vk::raii::Device m_device = nullptr;
+		vk::raii::Queue m_graphicsQueue = nullptr;
+		vk::raii::Queue m_presentQueue = nullptr;
+		uint32_t m_graphicsQueueFamilyIndex;
+
 
 		void CreateInstance();
-
-		/* TODO:
-		void CreateSurface();
+		void CreateSurface(); // May be moved to swapchain class
 		void SelectPhysicalDevice();
 		void CreateLogicalDevice();
+
+		/* TODO:
 		void CreateSwapChain();
 		void RecreateSwapChain();
 		void CleanUpSwapChain();
@@ -44,7 +60,5 @@ namespace Bjorn {
 			vk::PipelineStageFlags2 dstStageMask
 		);
 		*/
-
-		const std::string& m_appName;
 	};
 }

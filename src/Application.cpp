@@ -1,9 +1,16 @@
 #include "Application.hpp"
 
-namespace Bjorn {
-	Application::Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight) 
-		: m_window(windowWidth, windowHeight, name, this), m_renderer(name)
-	{}
+#include "GLFW/glfw3.h"
+
+namespace Bjorn 
+{
+	Application::Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight)
+	{
+		Init();
+
+		m_window = std::make_unique<Window>(windowWidth, windowHeight, name, this);
+		m_renderer = std::make_unique<Renderer>(name, *m_window);
+	}
 
 	void Application::Run() {
 		Init();
@@ -12,14 +19,14 @@ namespace Bjorn {
 	}
 
 	void Application::Init() {
-
+		glfwInit();
 	}
 
 	void Application::MainLoop() {
-
+		
 	}
 
 	void Application::CleanUp() {
-
+		glfwTerminate();
 	}
 }
