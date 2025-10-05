@@ -16,6 +16,6 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-	std::cout << "Done." << std::endl;
+	std::cout << "Fin." << std::endl;
 	return EXIT_SUCCESS;
 }

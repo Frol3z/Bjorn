@@ -15,9 +15,10 @@
     constexpr bool enableValidationLayers = true;
 #endif
 
-const std::vector validationLayers = 
+const std::vector validationLayers = // and FPS monitoring layer
 {
-    "VK_LAYER_KHRONOS_validation"
+    "VK_LAYER_KHRONOS_validation",
+    "VK_LAYER_LUNARG_monitor"
 };
 
 // Note that for greater number of concurrent frames
@@ -34,10 +35,7 @@ namespace Bjorn
         CreateSurface();
         SelectPhysicalDevice();
         CreateLogicalDevice();
-        
-        // TODO: move to an appropriate place
-        m_swapchain = std::make_unique<Swapchain>(m_physicalDevice, m_device, m_window, m_surface);
-
+        CreateSwapchain();
         CreateGraphicsPipeline();
         CreateCommandPool();
         CreateCommandBuffer();
@@ -349,6 +347,11 @@ namespace Bjorn
         m_graphicsQueue = vk::raii::Queue(m_device, graphicsQueueFamilyIndex, 0);
         m_presentQueue = vk::raii::Queue(m_device, presentQueueFamilyIndex, 0);
         m_graphicsQueueFamilyIndex = graphicsQueueFamilyIndex;
+    }
+
+    void Renderer::CreateSwapchain()
+    {
+        m_swapchain = std::make_unique<Swapchain>(m_physicalDevice, m_device, m_window, m_surface);
     }
 
     void Renderer::CreateGraphicsPipeline()

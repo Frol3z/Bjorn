@@ -51,6 +51,7 @@ namespace Bjorn
 		void CreateSurface(); // May be moved to swapchain class
 		void SelectPhysicalDevice();
 		void CreateLogicalDevice();
+		void CreateSwapchain();
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
 		void CreateCommandBuffer();
