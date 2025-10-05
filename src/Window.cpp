@@ -4,7 +4,7 @@
 
 namespace Bjorn 
 {
-	Window::Window(uint32_t width, uint32_t height, const std::string& title, Application* app) 
+	Window::Window(uint32_t width, uint32_t height, const std::string& title, Application& app) 
         : m_app(app)
     {
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -22,9 +22,14 @@ namespace Bjorn
         glfwDestroyWindow(m_window);
     }
 
+    int Window::ShouldClose() const
+    {
+        return glfwWindowShouldClose(m_window);
+    }
+
     void Window::FramebufferResizeCallback(GLFWwindow* window, int width, int height) 
     {
         auto win = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
-        win->m_app->isFramebufferResized = true;
+        win->m_app.isFramebufferResized.store(true);
     }
 }

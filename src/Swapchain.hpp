@@ -16,9 +16,15 @@ namespace Bjorn
 			const vk::raii::SurfaceKHR& surface
 		);
 
-		//void RecreateSwapChain();
-		//void CleanUpSwapChain();
-		//void CreateImageViews();
+		void RecreateSwapchain();
+		std::pair<vk::Result, uint32_t> AcquireNextImage(const vk::Semaphore& s);
+
+		const vk::SwapchainKHR& GetHandle() const { return *m_swapchain; }
+		const vk::SurfaceFormatKHR& GetSurfaceFormat() const { return m_swapchainSurfaceFormat; }
+		const vk::Extent2D& GetExtent() const { return m_swapchainExtent; }
+		const std::vector<vk::Image>& GetImages() const { return m_swapchainImages; }
+		const std::vector<vk::raii::ImageView>& GetImageViews() const { return m_swapchainImageViews; }
+
 	private:
 		const vk::raii::PhysicalDevice& m_physicalDevice;
 		const vk::raii::Device& m_device;
@@ -27,10 +33,13 @@ namespace Bjorn
 
 		vk::raii::SwapchainKHR m_swapchain = nullptr;
 		std::vector<vk::Image> m_swapchainImages;
+		std::vector<vk::raii::ImageView> m_swapchainImageViews;
 		vk::SurfaceFormatKHR m_swapchainSurfaceFormat;
 		vk::Extent2D m_swapchainExtent;
 \
 		void CreateSwapchain();
+		void CleanUpSwapchain();
+		void CreateImageViews();
 		
 		vk::SurfaceFormatKHR ChooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 		vk::Extent2D ChooseSwapchainExtent(const vk::SurfaceCapabilitiesKHR& capabilities);

@@ -1,9 +1,12 @@
 #include "Renderer.hpp"
 #include "Window.hpp"
+#include "Application.hpp"
 
 #include <GLFW/glfw3.h>
 
 #include <iostream>
+#include <fstream>
+#include <filesystem>
 
 // Validation layers
 #ifdef NDEBUG
@@ -17,24 +20,109 @@ const std::vector validationLayers =
     "VK_LAYER_KHRONOS_validation"
 };
 
+// Note that for greater number of concurrent frames
+// the CPU might get ahead of the GPU causing latency
+// between frames
+constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
 namespace Bjorn 
 {
-	Renderer::Renderer(const std::string& appName, const Window& window)
-        : m_appName(appName), m_window(window)
+	Renderer::Renderer(Application& app, const Window& window)
+        : m_app(app), m_window(window)
     {
         CreateInstance();
         CreateSurface();
         SelectPhysicalDevice();
         CreateLogicalDevice();
         
+        // TODO: move to an appropriate place
         m_swapchain = std::make_unique<Swapchain>(m_physicalDevice, m_device, m_window, m_surface);
+
+        CreateGraphicsPipeline();
+        CreateCommandPool();
+        CreateCommandBuffer();
+        CreateSyncObjects();
+    }
+
+    void Renderer::DrawFrame()
+    {
+        // CPU will wait until the GPU finishes rendering the previous frame (corresponding to the same swapchain image index)
+        while (vk::Result::eTimeout == m_device.waitForFences(*m_inFlightFences[m_currentFrame], vk::True, UINT64_MAX));
+
+        // Wait for the presentation to release the semaphore
+        m_presentQueue.waitIdle();
+
+        // Check if window has been resized/minimize before trying to acquire next image
+        if (m_app.isFramebufferResized.load()) {
+            m_app.isFramebufferResized.store(false);
+            m_swapchain->RecreateSwapchain();
+            return;
+        }
+
+        // Acquire next image index and signal the semaphore when done
+        auto [result, imageIndex] = m_swapchain->AcquireNextImage(*m_imageAvailableSemaphores[m_currentFrame]);
+
+        // Check if the surface is still compatible with the swapchain or if it was resized/minimized
+        // !!! Checking m_IsFramebufferResized guarantees prevents presentation to an invalid surface
+        if (result == vk::Result::eErrorOutOfDateKHR || m_app.isFramebufferResized.load()) {
+            m_app.isFramebufferResized.store(false);
+            m_swapchain->RecreateSwapchain();
+            return;
+        }
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+            throw std::runtime_error("Failed to acquire swapchain image!");
+        }
+
+        // Record command buffer and reset draw fence
+        m_device.resetFences(*m_inFlightFences[m_currentFrame]);
+        RecordCommandBuffer(imageIndex);
+
+        // Submit commands to the queue
+        vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        const vk::SubmitInfo submitInfo{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*m_imageAvailableSemaphores[m_currentFrame],
+            .pWaitDstStageMask = &waitDestinationStageMask,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &*m_commandBuffers[m_currentFrame],
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &*m_renderFinishedSemaphores[m_currentFrame]
+        };
+        m_graphicsQueue.submit(submitInfo, *m_inFlightFences[m_currentFrame]);
+
+        // Present to the screen
+        const vk::PresentInfoKHR presentInfoKHR{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*m_renderFinishedSemaphores[m_currentFrame],
+            .swapchainCount = 1,
+            .pSwapchains = &m_swapchain->GetHandle(),
+            .pImageIndices = &imageIndex
+        };
+        result = m_presentQueue.presentKHR(presentInfoKHR);
+
+        // Check again if presentation fails because the surface is now incompatible
+        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_app.isFramebufferResized.load()) {
+            m_app.isFramebufferResized.store(false);
+            m_swapchain->RecreateSwapchain();
+            return;
+        }
+        else if (result != vk::Result::eSuccess) {
+            throw std::runtime_error("Failed to present swapchain image!");
+        }
+
+        m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void Renderer::WaitIdle()
+    {
+        m_device.waitIdle();
     }
 
 	void Renderer::CreateInstance() 
     {
         // Optional appInfo struct
         const vk::ApplicationInfo appInfo{
-            .pApplicationName = m_appName.c_str(),
+            .pApplicationName = m_app.GetName().c_str(),
             .applicationVersion = VK_MAKE_VERSION(1,0,0),
             .pEngineName = "No Engine",
             .engineVersion = VK_MAKE_VERSION(1,0,0),
@@ -261,5 +349,295 @@ namespace Bjorn
         m_graphicsQueue = vk::raii::Queue(m_device, graphicsQueueFamilyIndex, 0);
         m_presentQueue = vk::raii::Queue(m_device, presentQueueFamilyIndex, 0);
         m_graphicsQueueFamilyIndex = graphicsQueueFamilyIndex;
+    }
+
+    void Renderer::CreateGraphicsPipeline()
+    {
+        // Create shader module
+        auto shaderPath = std::filesystem::current_path() / "shaders/slang.spv";
+        vk::raii::ShaderModule shaderModule = CreateShaderModule(ReadFile(shaderPath.string()));
+
+        // ShaderStageCreateInfo
+        vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eVertex,
+            .module = shaderModule,
+            .pName = "vertMain"
+        };
+        vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eFragment,
+            .module = shaderModule,
+            .pName = "fragMain"
+        };
+        vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+        // VertexInput
+        // TODO: remove hardcoded vertices and provide vertex and index buffers
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+
+        // InputAssembly
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
+            .topology = vk::PrimitiveTopology::eTriangleList
+        };
+
+        /*
+        // Pipeline-baked viewport and scissors
+        vk::Viewport{
+            0.0f,
+            0.0f,
+            static_cast<float>(m_SwapChainExtent.width),
+            static_cast<float>(m_SwapChainExtent.height),
+            0.0f,
+            1.0f
+        };
+
+        vk::Rect2D{
+            vk::Offset2D{ 0, 0 },
+            m_SwapChainExtent
+        };
+        */
+
+        // Dynamic viewport and scissors (will be set in the command buffer)
+        std::vector dynamicStates = {
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eScissor
+        };
+        vk::PipelineDynamicStateCreateInfo dynamicState{
+            .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+            .pDynamicStates = dynamicStates.data()
+        };
+        // We just need to specify how many there are at pipeline creation time
+        vk::PipelineViewportStateCreateInfo viewportState{ .viewportCount = 1, .scissorCount = 1 };
+
+        // Rasterizer
+        vk::PipelineRasterizationStateCreateInfo rasterizer{
+            .depthClampEnable = vk::False, // Clamp out of bound depth values to the near or far plane
+            .rasterizerDiscardEnable = vk::False, // Disable rasterization (no output)
+            .polygonMode = vk::PolygonMode::eFill, // For wireframe mode a GPU feature must be enabled
+            .cullMode = vk::CullModeFlagBits::eBack, // Self explanatory
+            .frontFace = vk::FrontFace::eClockwise,
+            .depthBiasEnable = vk::False,
+            .depthBiasSlopeFactor = 1.0f,
+            .lineWidth = 1.0f
+        };
+
+        // MSAA (currently disabled because it requires enabling a GPU feature)
+        vk::PipelineMultisampleStateCreateInfo multisampling{
+            .rasterizationSamples = vk::SampleCountFlagBits::e1,
+            .sampleShadingEnable = vk::False
+        };
+
+        // Color blending (currently alpha blending is configured for reference but disabled)
+        vk::PipelineColorBlendAttachmentState colorBlendAttachment;
+        colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        colorBlendAttachment.blendEnable = vk::False;
+        colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+        colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
+        colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+        colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+        colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+
+        // Blending with bitwise operations
+        vk::PipelineColorBlendStateCreateInfo colorBlending{
+            .logicOpEnable = vk::False,
+            .logicOp = vk::LogicOp::eCopy,
+            .attachmentCount = 1,
+            .pAttachments = &colorBlendAttachment
+        };
+
+        // Uniforms (not used yet)
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
+            .setLayoutCount = 0,
+            .pushConstantRangeCount = 0
+        };
+        m_pipelineLayout = vk::raii::PipelineLayout(m_device, pipelineLayoutInfo);
+
+        // PipelineRenderingCreateInfo
+        // It specifies the formats of the attachment used with dynamic rendering
+        vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{
+            .colorAttachmentCount = 1,
+            .pColorAttachmentFormats = &m_swapchain->GetSurfaceFormat().format
+        };
+
+        // GraphicsPipelineCreateInfo
+        vk::GraphicsPipelineCreateInfo pipelineInfo{
+            .pNext = &pipelineRenderingCreateInfo,
+            .stageCount = 2,
+            .pStages = shaderStages,
+            .pVertexInputState = &vertexInputInfo,
+            .pInputAssemblyState = &inputAssembly,
+            .pViewportState = &viewportState,
+            .pRasterizationState = &rasterizer,
+            .pMultisampleState = &multisampling,
+            .pColorBlendState = &colorBlending,
+            .pDynamicState = &dynamicState,
+            .layout = m_pipelineLayout,
+            .renderPass = nullptr // Because we are using dynamic rendering
+        };
+
+        // FINALLY!
+        m_graphicsPipeline = vk::raii::Pipeline(m_device, nullptr, pipelineInfo);
+    }
+
+    vk::raii::ShaderModule Renderer::CreateShaderModule(const std::vector<char>& code) const
+    {
+        vk::ShaderModuleCreateInfo createInfo{
+            .codeSize = code.size() * sizeof(char),
+            .pCode = reinterpret_cast<const uint32_t*>(code.data())
+        };
+        vk::raii::ShaderModule shaderModule(m_device, createInfo);
+        return shaderModule;
+    }
+
+    std::vector<char> Renderer::ReadFile(const std::string& filename) 
+    {
+        // Read starting from the end to determine the size of the file
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open file!");
+        }
+
+        std::vector<char> buffer(file.tellg());
+        file.seekg(0, std::ios::beg);
+        file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        file.close();
+
+        return buffer;
+    }
+
+    void Renderer::CreateCommandPool()
+    {
+        // CommandPoolCreateInfo
+        vk::CommandPoolCreateInfo poolInfo = {
+            .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+            .queueFamilyIndex = m_graphicsQueueFamilyIndex
+        };
+        m_commandPool = vk::raii::CommandPool(m_device, poolInfo);
+    }
+
+    void Renderer::CreateCommandBuffer()
+    {
+        // CommandBufferAllocateInfo
+        vk::CommandBufferAllocateInfo allocInfo{
+            .commandPool = m_commandPool,
+            .level = vk::CommandBufferLevel::ePrimary,
+            .commandBufferCount = MAX_FRAMES_IN_FLIGHT
+        };
+        m_commandBuffers = vk::raii::CommandBuffers(m_device, allocInfo);
+    }
+
+    void Renderer::CreateSyncObjects()
+    {
+        m_imageAvailableSemaphores.clear();
+        m_renderFinishedSemaphores.clear();
+        m_inFlightFences.clear();
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            m_imageAvailableSemaphores.emplace_back(m_device, vk::SemaphoreCreateInfo());
+            m_renderFinishedSemaphores.emplace_back(m_device, vk::SemaphoreCreateInfo());
+            m_inFlightFences.emplace_back(m_device, vk::FenceCreateInfo{ .flags = vk::FenceCreateFlagBits::eSignaled });
+        }
+    }
+
+    void Renderer::RecordCommandBuffer(uint32_t imageIndex)
+    {
+        // Reset command buffer
+        m_commandBuffers[m_currentFrame].begin({});
+
+        // Transition image layout to color attachment
+        TransitionImageLayout(
+            imageIndex,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            {},
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput
+        );
+
+        // Setup color attachment
+        vk::ClearValue clearColor = vk::ClearColorValue(0.98f, 0.93f, 0.93f, 1.0f);
+        vk::RenderingAttachmentInfo attachmentInfo{
+            .imageView = m_swapchain->GetImageViews()[imageIndex],
+            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = clearColor
+        };
+
+        // Setup rendering info
+        auto swapchainExtent = m_swapchain->GetExtent();
+        vk::RenderingInfo renderingInfo = {
+            .renderArea = {.offset = { 0, 0 }, .extent = swapchainExtent},
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &attachmentInfo
+        };
+
+        // Begin rendering
+        m_commandBuffers[m_currentFrame].beginRendering(renderingInfo);
+
+        // Bind the graphic pipeline (the attachment will be bound to the fragment shader output)
+        m_commandBuffers[m_currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, m_graphicsPipeline);
+
+        // Set viewport and scissor size (dynamic rendering)
+        m_commandBuffers[m_currentFrame].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f));
+        m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
+
+        // Draw command
+        m_commandBuffers[m_currentFrame].draw(3, 1, 0, 0);
+
+        // Finish up rendering
+        m_commandBuffers[m_currentFrame].endRendering();
+
+        // After rendering, transition the swapchain image to PRESENT_SRC
+        TransitionImageLayout(
+            imageIndex,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::ePresentSrcKHR,
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            {},
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::PipelineStageFlagBits2::eBottomOfPipe
+        );
+
+        // Finish recording command onto the buffer
+        m_commandBuffers[m_currentFrame].end();
+    }
+
+    void Renderer::TransitionImageLayout(
+        uint32_t imageIndex,
+        vk::ImageLayout oldLayout,
+        vk::ImageLayout newLayout,
+        vk::AccessFlags2 srcAccessMask,
+        vk::AccessFlags2 dstAccessMask,
+        vk::PipelineStageFlags2 srcStageMask,
+        vk::PipelineStageFlags2 dstStageMask
+    )
+    {
+        vk::ImageMemoryBarrier2 barrier = {
+            .srcStageMask = srcStageMask,
+            .srcAccessMask = srcAccessMask,
+            .dstStageMask = dstStageMask,
+            .dstAccessMask = dstAccessMask,
+            .oldLayout = oldLayout,
+            .newLayout = newLayout,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_swapchain->GetImages()[imageIndex],
+            .subresourceRange = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        };
+        vk::DependencyInfo dependencyInfo = {
+            .dependencyFlags = {},
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &barrier
+        };
+        m_commandBuffers[m_currentFrame].pipelineBarrier2(dependencyInfo);
     }
 }

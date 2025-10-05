@@ -14,7 +14,31 @@ namespace Bjorn
         : m_physicalDevice(physicalDevice), m_device(device), m_surface(surface), m_window(window)
 	{
 		CreateSwapchain();
+        CreateImageViews();
 	}
+
+    void Swapchain::RecreateSwapchain() 
+    {
+        // Handling minimization
+        int width = 0, height = 0;
+        glfwGetFramebufferSize(m_window.GetHandle(), &width, &height);
+        while (width == 0 || height == 0) {
+            glfwGetFramebufferSize(m_window.GetHandle(), &width, &height);
+            glfwWaitEvents(); // "Pausing" when minimized
+        }
+
+        m_device.waitIdle();
+
+        CleanUpSwapchain();
+
+        CreateSwapchain();
+        CreateImageViews();
+    }
+
+    std::pair<vk::Result, uint32_t> Swapchain::AcquireNextImage(const vk::Semaphore& s)
+    {
+        return m_swapchain.acquireNextImage(UINT64_MAX, s, nullptr);
+    }
 
 	void Swapchain::CreateSwapchain()
 	{
@@ -59,6 +83,30 @@ namespace Bjorn
         m_swapchain = vk::raii::SwapchainKHR(m_device, swapChainCreateInfo);
         m_swapchainImages = m_swapchain.getImages();
 	}
+
+    void Swapchain::CleanUpSwapchain()
+    {
+        m_swapchainImageViews.clear();
+        m_swapchain = nullptr;
+    }
+
+    void Swapchain::CreateImageViews()
+    {
+        m_swapchainImageViews.clear();
+
+        // ImageViewCreateInfo
+        vk::ImageViewCreateInfo imageViewCreateInfo{
+            .viewType = vk::ImageViewType::e2D,
+            .format = m_swapchainSurfaceFormat.format,
+            .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
+        };
+
+        // Create image views for each image
+        for (auto image : m_swapchainImages) {
+            imageViewCreateInfo.image = image;
+            m_swapchainImageViews.emplace_back(m_device, imageViewCreateInfo);
+        }
+    }
 
     vk::SurfaceFormatKHR Swapchain::ChooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
     {

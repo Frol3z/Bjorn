@@ -8,17 +8,22 @@ namespace Bjorn
 {
 
 	// Fwd declaration
+	class Application;
 	class Window;
 
 	class Renderer 
 	{
 	public:
-		Renderer(const std::string& appName, const Window& window);
+		Renderer(Application& app, const Window& window);
+
+		void DrawFrame();
+		void WaitIdle();
 
 	private:
-		const std::string& m_appName;
-
+		Application& m_app; // Need to be able to modifie the framebufferResized boolean
 		const Window& m_window;
+
+		uint32_t m_currentFrame = 0;
 
 		vk::raii::Context m_context;
 		vk::raii::Instance m_instance = nullptr;
@@ -32,21 +37,29 @@ namespace Bjorn
 
 		std::unique_ptr<Swapchain> m_swapchain = nullptr;
 
+		vk::raii::Pipeline m_graphicsPipeline = nullptr;
+		vk::raii::PipelineLayout m_pipelineLayout = nullptr;
+
+		vk::raii::CommandPool m_commandPool = nullptr;
+		std::vector<vk::raii::CommandBuffer> m_commandBuffers;
+
+		std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
+		std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
+		std::vector<vk::raii::Fence> m_inFlightFences;
+
 		void CreateInstance();
 		void CreateSurface(); // May be moved to swapchain class
 		void SelectPhysicalDevice();
 		void CreateLogicalDevice();
-
-		/* TODO:
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
 		void CreateCommandBuffer();
 		void CreateSyncObjects();
 
-		void RecordCommandBuffer(uint32_t imageIndex);
-
-		static std::vector<char> ReadFile(const std::string& filename);
 		[[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const;
+		static std::vector<char> ReadFile(const std::string& filename);
+
+		void RecordCommandBuffer(uint32_t imageIndex);
 		void TransitionImageLayout(
 			uint32_t imageIndex,
 			vk::ImageLayout oldLayout,
@@ -56,6 +69,5 @@ namespace Bjorn
 			vk::PipelineStageFlags2 srcStageMask,
 			vk::PipelineStageFlags2 dstStageMask
 		);
-		*/
 	};
 }

@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.10)
-project(Raytracer)
+project(Bjorn)
 
 include(${CMAKE_SOURCE_DIR}/cmake/Shaders.cmake)
 
@@ -62,11 +62,11 @@ FetchContent_MakeAvailable(glm)
 # -----------------------------
 # Build executable
 # -----------------------------
-add_executable(Raytracer "src/Main.cpp" "src/Window.cpp" "src/Application.cpp" "src/Renderer.cpp" "src/Swapchain.cpp")
+add_executable(Bjorn "src/Main.cpp" "src/Window.cpp" "src/Application.cpp" "src/Renderer.cpp" "src/Swapchain.cpp")
 
-target_include_directories(Raytracer PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(Bjorn PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
-target_link_libraries(Raytracer
+target_link_libraries(Bjorn
     PRIVATE
     Vulkan::cppm
     glfw
@@ -77,10 +77,10 @@ target_link_libraries(Raytracer
 set (SHADER_SLANG_SOURCES ${CMAKE_SOURCE_DIR}/shaders/shader.slang)
 
 add_slang_shader_target(Shaders SOURCES ${SHADER_SLANG_SOURCES})
-add_dependencies(Raytracer Shaders)
+add_dependencies(Bjorn Shaders)
 
 # Copy resources to the build folder
 add_custom_command(
-    TARGET Raytracer POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/shaders $<TARGET_FILE_DIR:Raytracer>/shaders
+    TARGET Bjorn POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/shaders $<TARGET_FILE_DIR:Bjorn>/shaders
 )

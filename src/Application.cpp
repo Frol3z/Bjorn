@@ -5,11 +5,12 @@
 namespace Bjorn 
 {
 	Application::Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight)
+		: m_name(name)
 	{
 		Init();
 
-		m_window = std::make_unique<Window>(windowWidth, windowHeight, name, this);
-		m_renderer = std::make_unique<Renderer>(name, *m_window);
+		m_window = std::make_unique<Window>(windowWidth, windowHeight, m_name, *this);
+		m_renderer = std::make_unique<Renderer>(*this, *m_window);
 	}
 
 	void Application::Run() 
@@ -26,7 +27,11 @@ namespace Bjorn
 
 	void Application::MainLoop() 
 	{
-		
+		while (!m_window->ShouldClose()) {
+			glfwPollEvents();
+			m_renderer->DrawFrame();
+		}
+		m_renderer->WaitIdle(); // Wait for pending GPU operations to finish
 	}
 
 	void Application::CleanUp() 
