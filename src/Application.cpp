@@ -10,7 +10,8 @@ namespace Bjorn
 		Init();
 
 		m_window = std::make_unique<Window>(windowWidth, windowHeight, m_name, *this);
-		m_renderer = std::make_unique<Renderer>(*this, *m_window);
+		m_scene = std::make_unique<Scene>();
+		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
 	}
 
 	void Application::Run() 

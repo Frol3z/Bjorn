@@ -1,5 +1,3 @@
-#include "Renderer.hpp"
-#include "Window.hpp"
 #include "Application.hpp"
 
 #include <GLFW/glfw3.h>
@@ -28,8 +26,8 @@ constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
 namespace Bjorn 
 {
-	Renderer::Renderer(Application& app, const Window& window)
-        : m_app(app), m_window(window)
+	Renderer::Renderer(Application& app, const Window& window, const Scene& scene)
+        : m_app(app), m_window(window), m_scene(scene)
     {
         CreateInstance();
         CreateSurface();
@@ -38,6 +36,7 @@ namespace Bjorn
         CreateSwapchain();
         CreateGraphicsPipeline();
         CreateCommandPool();
+        CreateVertexBuffer();
         CreateCommandBuffer();
         CreateSyncObjects();
     }
@@ -374,8 +373,15 @@ namespace Bjorn
         vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
         // VertexInput
-        // TODO: remove hardcoded vertices and provide vertex and index buffers
-        vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+        // TODO: add index buffers support
+        auto bindingDescription = Vertex::GetBindingDescription();
+        auto attributeDescriptions = Vertex::GetAttributeDescriptions();
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
+            .vertexBindingDescriptionCount = 1,
+            .pVertexBindingDescriptions = &bindingDescription,
+            .vertexAttributeDescriptionCount = attributeDescriptions.size(),
+            .pVertexAttributeDescriptions = attributeDescriptions.data()
+        };
 
         // InputAssembly
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
@@ -518,6 +524,34 @@ namespace Bjorn
         m_commandPool = vk::raii::CommandPool(m_device, poolInfo);
     }
 
+    void Renderer::CreateVertexBuffer()
+    {
+        // Buffer creation (with no memory assigned to it yet)
+        auto vertices = m_scene.GetVertices();
+        vk::BufferCreateInfo bufferInfo{
+            .size = sizeof(vertices[0]) * vertices.size(),
+            .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+            .sharingMode = vk::SharingMode::eExclusive
+        };
+        m_vertexBuffer = vk::raii::Buffer(m_device, bufferInfo);
+
+        // Buffer memory allocation and binding
+        vk::MemoryRequirements memRequirements = m_vertexBuffer.getMemoryRequirements();
+        vk::MemoryAllocateInfo memoryAllocateInfo{
+            .allocationSize = memRequirements.size,
+            .memoryTypeIndex = FindMemoryType(
+                memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+            )
+        };
+        m_vertexBufferMemory = vk::raii::DeviceMemory(m_device, memoryAllocateInfo);
+        m_vertexBuffer.bindMemory(*m_vertexBufferMemory, 0);
+
+        // Filling the GPU buffer with CPU data
+        void* data = m_vertexBufferMemory.mapMemory(0, bufferInfo.size);
+        memcpy(data, m_scene.GetVertices().data(), bufferInfo.size);
+        m_vertexBufferMemory.unmapMemory();
+    }
+
     void Renderer::CreateCommandBuffer()
     {
         // CommandBufferAllocateInfo
@@ -559,7 +593,7 @@ namespace Bjorn
         );
 
         // Setup color attachment
-        vk::ClearValue clearColor = vk::ClearColorValue(0.98f, 0.93f, 0.93f, 1.0f);
+        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
         vk::RenderingAttachmentInfo attachmentInfo{
             .imageView = m_swapchain->GetImageViews()[imageIndex],
             .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -586,6 +620,9 @@ namespace Bjorn
         // Set viewport and scissor size (dynamic rendering)
         m_commandBuffers[m_currentFrame].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f));
         m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
+
+        // Bind vertex buffer
+        m_commandBuffers[m_currentFrame].bindVertexBuffers(0, *m_vertexBuffer, { 0 });
 
         // Draw command
         m_commandBuffers[m_currentFrame].draw(3, 1, 0, 0);
@@ -642,5 +679,20 @@ namespace Bjorn
             .pImageMemoryBarriers = &barrier
         };
         m_commandBuffers[m_currentFrame].pipelineBarrier2(dependencyInfo);
+    }
+
+    uint32_t Renderer::FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
+    {
+        vk::PhysicalDeviceMemoryProperties memProperties = m_physicalDevice.getMemoryProperties();
+
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+        {
+            // Check for memory type and properties suitability
+            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+            {
+                return i;
+            }
+        }
+        throw std::runtime_error("Failed to find suitable memory type!");
     }
 }

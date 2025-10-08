@@ -10,18 +10,20 @@ namespace Bjorn
 	// Fwd declaration
 	class Application;
 	class Window;
+	class Scene;
 
 	class Renderer 
 	{
 	public:
-		Renderer(Application& app, const Window& window);
+		Renderer(Application& app, const Window& window, const Scene& scene);
 
 		void DrawFrame();
 		void WaitIdle();
 
 	private:
-		Application& m_app; // Need to be able to modifie the framebufferResized boolean
+		Application& m_app; // Need to be able to modify the framebufferResized boolean
 		const Window& m_window;
+		const Scene& m_scene;
 
 		uint32_t m_currentFrame = 0;
 
@@ -47,6 +49,9 @@ namespace Bjorn
 		std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
 		std::vector<vk::raii::Fence> m_inFlightFences;
 
+		vk::raii::Buffer m_vertexBuffer = nullptr;
+		vk::raii::DeviceMemory m_vertexBufferMemory = nullptr;
+
 		void CreateInstance();
 		void CreateSurface(); // May be moved to swapchain class
 		void SelectPhysicalDevice();
@@ -54,6 +59,7 @@ namespace Bjorn
 		void CreateSwapchain();
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
+		void CreateVertexBuffer();
 		void CreateCommandBuffer();
 		void CreateSyncObjects();
 
@@ -70,5 +76,7 @@ namespace Bjorn
 			vk::PipelineStageFlags2 srcStageMask,
 			vk::PipelineStageFlags2 dstStageMask
 		);
+
+		uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 	};
 }
