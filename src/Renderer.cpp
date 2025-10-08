@@ -33,12 +33,32 @@ namespace Bjorn
         CreateSurface();
         SelectPhysicalDevice();
         CreateLogicalDevice();
+        CreateMemoryAllocator();
         CreateSwapchain();
         CreateGraphicsPipeline();
         CreateCommandPool();
         CreateVertexBuffer();
         CreateCommandBuffer();
         CreateSyncObjects();
+    }
+
+    Renderer::~Renderer()
+    {
+        // VMA allocated memory clean up
+        if (m_stagingBufferAllocation) {
+            vmaFreeMemory(m_allocator, m_stagingBufferAllocation);
+            m_stagingBufferAllocation = VK_NULL_HANDLE;
+        }
+
+        if (m_vertexBufferAllocation) {
+            vmaFreeMemory(m_allocator, m_vertexBufferAllocation);
+            m_vertexBufferAllocation = VK_NULL_HANDLE;
+        }
+
+        if (m_allocator) {
+            vmaDestroyAllocator(m_allocator);
+            m_allocator = VK_NULL_HANDLE;
+        }
     }
 
     void Renderer::DrawFrame()
@@ -348,6 +368,17 @@ namespace Bjorn
         m_graphicsQueueFamilyIndex = graphicsQueueFamilyIndex;
     }
 
+    void Renderer::CreateMemoryAllocator()
+    {
+        VmaAllocatorCreateInfo allocatorCreateInfo{
+            .physicalDevice = *m_physicalDevice,
+            .device = *m_device,
+            .instance = *m_instance,
+            .vulkanApiVersion = vk::ApiVersion14
+        };
+        vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
+    }
+
     void Renderer::CreateSwapchain()
     {
         m_swapchain = std::make_unique<Swapchain>(m_physicalDevice, m_device, m_window, m_surface);
@@ -526,30 +557,78 @@ namespace Bjorn
 
     void Renderer::CreateVertexBuffer()
     {
-        // Buffer creation (with no memory assigned to it yet)
+        /*
+            ### Raw (no VMA) buffer creation process ###
+            
+            // Buffer creation (with no memory assigned to it yet)
+            auto vertices = m_scene.GetVertices();
+            vk::BufferCreateInfo bufferInfo{
+                .size = sizeof(vertices[0]) * vertices.size(),
+                .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+                .sharingMode = vk::SharingMode::eExclusive
+            };
+            m_vertexBuffer = vk::raii::Buffer(m_device, bufferInfo);
+        
+            // Buffer memory allocation and binding
+            vk::MemoryRequirements memRequirements = m_vertexBuffer.getMemoryRequirements();
+            vk::MemoryAllocateInfo memoryAllocateInfo{
+                .allocationSize = memRequirements.size,
+                .memoryTypeIndex = FindMemoryType(
+                    memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+                )
+            };
+            m_vertexBufferMemory = vk::raii::DeviceMemory(m_device, memoryAllocateInfo);
+            m_vertexBuffer.bindMemory(*m_vertexBufferMemory, 0);
+
+            // Filling the GPU buffer with CPU data
+            void* data = m_vertexBufferMemory.mapMemory(0, bufferInfo.size);
+            memcpy(data, m_scene.GetVertices().data(), bufferInfo.size);
+            m_vertexBufferMemory.unmapMemory();
+        */
+
         auto vertices = m_scene.GetVertices();
-        vk::BufferCreateInfo bufferInfo{
-            .size = sizeof(vertices[0]) * vertices.size(),
-            .usage = vk::BufferUsageFlagBits::eVertexBuffer,
-            .sharingMode = vk::SharingMode::eExclusive
-        };
-        m_vertexBuffer = vk::raii::Buffer(m_device, bufferInfo);
+        vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-        // Buffer memory allocation and binding
-        vk::MemoryRequirements memRequirements = m_vertexBuffer.getMemoryRequirements();
-        vk::MemoryAllocateInfo memoryAllocateInfo{
-            .allocationSize = memRequirements.size,
-            .memoryTypeIndex = FindMemoryType(
-                memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-            )
-        };
-        m_vertexBufferMemory = vk::raii::DeviceMemory(m_device, memoryAllocateInfo);
-        m_vertexBuffer.bindMemory(*m_vertexBufferMemory, 0);
+        // Staging buffer creation
+        VkBufferCreateInfo stagingInfo{};
+        stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        stagingInfo.size = bufferSize;
+        stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        // Filling the GPU buffer with CPU data
-        void* data = m_vertexBufferMemory.mapMemory(0, bufferInfo.size);
-        memcpy(data, m_scene.GetVertices().data(), bufferInfo.size);
-        m_vertexBufferMemory.unmapMemory();
+        VmaAllocationCreateInfo stagingAllocInfo{};
+        stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+
+        VkBuffer rawBuffer;
+        VmaAllocation allocation;
+        vmaCreateBuffer(m_allocator, &stagingInfo, &stagingAllocInfo, &rawBuffer, &allocation, nullptr);
+
+        m_stagingBuffer = vk::raii::Buffer(m_device, rawBuffer);
+        m_stagingBufferAllocation = allocation;
+
+        // Fill the staging buffer with vertex data
+        void* data = nullptr;
+        vmaMapMemory(m_allocator, m_stagingBufferAllocation, &data);
+        memcpy(data, m_scene.GetVertices().data(), bufferSize);
+        vmaUnmapMemory(m_allocator, m_stagingBufferAllocation);
+
+        // Vertex buffer creation with memory allocation
+        VkBufferCreateInfo vertexInfo{};
+        vertexInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        vertexInfo.size = bufferSize;
+        vertexInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        vertexInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        
+        VmaAllocationCreateInfo vertexAllocInfo{};
+        vertexAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        
+        vmaCreateBuffer(m_allocator, &vertexInfo, &vertexAllocInfo, &rawBuffer, &allocation, nullptr);
+
+        m_vertexBuffer = vk::raii::Buffer(m_device, rawBuffer);
+        m_vertexBufferAllocation = allocation;
+
+        // Copy vertex data from shared buffer to GPU only vertex buffer
+        CopyBuffer(m_stagingBuffer, m_vertexBuffer, bufferSize);
     }
 
     void Renderer::CreateCommandBuffer()
@@ -681,18 +760,33 @@ namespace Bjorn
         m_commandBuffers[m_currentFrame].pipelineBarrier2(dependencyInfo);
     }
 
-    uint32_t Renderer::FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
+    void Renderer::CopyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
     {
-        vk::PhysicalDeviceMemoryProperties memProperties = m_physicalDevice.getMemoryProperties();
+        // TODO: May be better to create a temporary command pool for memory allocation optimization
 
-        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
-        {
-            // Check for memory type and properties suitability
-            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-            {
-                return i;
-            }
-        }
-        throw std::runtime_error("Failed to find suitable memory type!");
+        // Command buffer allocation
+        vk::CommandBufferAllocateInfo allocInfo{ 
+            .commandPool = m_commandPool, 
+            .level = vk::CommandBufferLevel::ePrimary, 
+            .commandBufferCount = 1 
+        };
+        vk::raii::CommandBuffer commandCopyBuffer = std::move(m_device.allocateCommandBuffers(allocInfo).front());
+
+        // Record commands
+        commandCopyBuffer.begin(vk::CommandBufferBeginInfo{
+            .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+        });
+        commandCopyBuffer.copyBuffer(srcBuffer, dstBuffer, vk::BufferCopy(0, 0, size));
+        commandCopyBuffer.end();
+
+        // Submit to queue
+        m_graphicsQueue.submit(
+            vk::SubmitInfo{ 
+            .commandBufferCount = 1, 
+            .pCommandBuffers = &*commandCopyBuffer 
+            }, 
+            nullptr
+        );
+        m_graphicsQueue.waitIdle();
     }
 }

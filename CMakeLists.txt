@@ -59,12 +59,27 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+# VMA
+FetchContent_Declare(
+    VMA
+    GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+    GIT_TAG master
+)
+FetchContent_MakeAvailable(VMA)
+
 # -----------------------------
 # Build executable
 # -----------------------------
-add_executable(Bjorn "src/Main.cpp" "src/Window.cpp" "src/Application.cpp" "src/Renderer.cpp" "src/Swapchain.cpp")
+add_executable(Bjorn 
+    "src/Main.cpp" 
+    "src/Window.cpp" 
+    "src/Application.cpp" 
+    "src/Renderer.cpp" 
+    "src/Swapchain.cpp" 
+    "src/VmaUsage.cpp"
+)
 
-target_include_directories(Bjorn PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(Bjorn PRIVATE ${CMAKE_SOURCE_DIR}/include ${VMA_SOURCE_DIR}/include)
 
 target_link_libraries(Bjorn
     PRIVATE

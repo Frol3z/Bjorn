@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan_raii.hpp>
+#include <vk_mem_alloc.h>
 
 #include "Swapchain.hpp"
 
@@ -16,6 +17,7 @@ namespace Bjorn
 	{
 	public:
 		Renderer(Application& app, const Window& window, const Scene& scene);
+		~Renderer();
 
 		void DrawFrame();
 		void WaitIdle();
@@ -49,13 +51,17 @@ namespace Bjorn
 		std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
 		std::vector<vk::raii::Fence> m_inFlightFences;
 
+		VmaAllocator m_allocator;
+		vk::raii::Buffer m_stagingBuffer = nullptr;
+		VmaAllocation m_stagingBufferAllocation;
 		vk::raii::Buffer m_vertexBuffer = nullptr;
-		vk::raii::DeviceMemory m_vertexBufferMemory = nullptr;
+		VmaAllocation m_vertexBufferAllocation;
 
 		void CreateInstance();
 		void CreateSurface(); // May be moved to swapchain class
 		void SelectPhysicalDevice();
 		void CreateLogicalDevice();
+		void CreateMemoryAllocator();
 		void CreateSwapchain();
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
@@ -77,6 +83,6 @@ namespace Bjorn
 			vk::PipelineStageFlags2 dstStageMask
 		);
 
-		uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+		void CopyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
 	};
 }
