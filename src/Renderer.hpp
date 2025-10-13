@@ -84,6 +84,6 @@ namespace Bjorn
 			vk::PipelineStageFlags2 dstStageMask
 		);
 
-		void CopyBuffer(const VkBuffer& srcBuffer, const VkBuffer& dstBuffer, vk::DeviceSize size);
+		void CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size);
 	};
 }

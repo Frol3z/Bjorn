@@ -2,13 +2,12 @@
 
 namespace Bjorn
 {
-	Buffer::Buffer(
-		const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, 
-		const VmaAllocator& allocator, const vk::raii::Device& device
-	)
+	Buffer::Buffer(const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, const VmaAllocator& allocator)
 		: m_allocator(allocator)
 	{
-		vmaCreateBuffer(m_allocator, &bufferInfo, &allocInfo, &m_buffer, &m_allocation, nullptr);
+		VkBuffer raw;
+		vmaCreateBuffer(m_allocator, &bufferInfo, &allocInfo, &raw, &m_allocation, nullptr);
+		m_buffer = vk::Buffer(raw);
 	}
 
 	Buffer::~Buffer()

@@ -8,18 +8,15 @@ namespace Bjorn
 	class Buffer
 	{
 	public:
-		Buffer(
-			const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, 
-			const VmaAllocator& allocator, const vk::raii::Device& device
-		);
+		Buffer(const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, const VmaAllocator& allocator);
 		~Buffer();
 
 		void LoadData(const void* data, const size_t size);
-		const VkBuffer& GetHandle() const { return m_buffer; };
+		const vk::Buffer& GetHandle() const { return m_buffer; };
 
 	private:
 		const VmaAllocator& m_allocator;
-		VkBuffer m_buffer = nullptr;
+		vk::Buffer m_buffer = nullptr;
 		VmaAllocation m_allocation;
 	};
 }

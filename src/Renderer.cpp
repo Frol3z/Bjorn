@@ -595,9 +595,7 @@ namespace Bjorn
         VmaAllocationCreateInfo stagingAllocInfo{};
         stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 
-        m_stagingBuffer = std::make_unique<Buffer>(
-            stagingInfo, stagingAllocInfo, m_allocator, m_device
-        );
+        m_stagingBuffer = std::make_unique<Buffer>(stagingInfo, stagingAllocInfo, m_allocator);
 
         // Fill the staging buffer with vertex data
         m_stagingBuffer->LoadData(vertices.data(), bufferSize);
@@ -612,12 +610,10 @@ namespace Bjorn
         VmaAllocationCreateInfo vertexAllocInfo{};
         vertexAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
         
-        m_vertexBuffer = std::make_unique<Buffer>(
-            vertexInfo, vertexAllocInfo, m_allocator, m_device
-        );
+        m_vertexBuffer = std::make_unique<Buffer>(vertexInfo, vertexAllocInfo, m_allocator);
 
         // Copy vertex data from shared buffer to GPU only vertex buffer
-        CopyBuffer(m_stagingBuffer->GetHandle(), m_vertexBuffer->GetHandle(), bufferSize);
+        CopyBuffer(*m_stagingBuffer, *m_vertexBuffer, bufferSize);
     }
 
     void Renderer::CreateIndexBuffer()
@@ -638,10 +634,10 @@ namespace Bjorn
         VmaAllocationCreateInfo indexAllocInfo{};
         indexAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-        m_indexBuffer = std::make_unique<Buffer>(indexInfo, indexAllocInfo, m_allocator, m_device);
+        m_indexBuffer = std::make_unique<Buffer>(indexInfo, indexAllocInfo, m_allocator);
 
         // Copy index data from shared buffer to GPU only index buffer
-        CopyBuffer(m_stagingBuffer->GetHandle(), m_indexBuffer->GetHandle(), bufferSize);
+        CopyBuffer(*m_stagingBuffer, *m_indexBuffer, bufferSize);
     }
 
     void Renderer::CreateCommandBuffer()
@@ -713,11 +709,9 @@ namespace Bjorn
         m_commandBuffers[m_currentFrame].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f));
         m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
 
-        // Bind vertex buffer
-        vk::Buffer vert = m_vertexBuffer->GetHandle();
-        vk::Buffer ind = m_indexBuffer->GetHandle();
-        m_commandBuffers[m_currentFrame].bindVertexBuffers(0, vert, {0});
-        m_commandBuffers[m_currentFrame].bindIndexBuffer(ind, 0, vk::IndexType::eUint16);
+        // Bind vertex and idnex buffer
+        m_commandBuffers[m_currentFrame].bindVertexBuffers(0, m_vertexBuffer->GetHandle(), {0});
+        m_commandBuffers[m_currentFrame].bindIndexBuffer(m_indexBuffer->GetHandle(), 0, vk::IndexType::eUint16);
 
         // Draw command
         m_commandBuffers[m_currentFrame].drawIndexed(m_scene.GetIndices().size(), 1, 0, 0, 0);
@@ -776,7 +770,7 @@ namespace Bjorn
         m_commandBuffers[m_currentFrame].pipelineBarrier2(dependencyInfo);
     }
 
-    void Renderer::CopyBuffer(const VkBuffer& srcBuffer, const VkBuffer& dstBuffer, vk::DeviceSize size)
+    void Renderer::CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size)
     {
         // TODO: May be better to create a temporary command pool for memory allocation optimization
 
@@ -792,7 +786,7 @@ namespace Bjorn
         commandCopyBuffer.begin(vk::CommandBufferBeginInfo{
             .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
         });
-        commandCopyBuffer.copyBuffer(srcBuffer, dstBuffer, vk::BufferCopy(0, 0, size));
+        commandCopyBuffer.copyBuffer(srcBuffer.GetHandle(), dstBuffer.GetHandle(), vk::BufferCopy(0, 0, size));
         commandCopyBuffer.end();
 
         // Submit to queue
