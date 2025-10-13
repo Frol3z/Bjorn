@@ -38,6 +38,7 @@ namespace Bjorn
         CreateGraphicsPipeline();
         CreateCommandPool();
         CreateVertexBuffer();
+        CreateIndexBuffer();
         CreateCommandBuffer();
         CreateSyncObjects();
     }
@@ -53,6 +54,11 @@ namespace Bjorn
         if (m_vertexBufferAllocation) {
             vmaFreeMemory(m_allocator, m_vertexBufferAllocation);
             m_vertexBufferAllocation = VK_NULL_HANDLE;
+        }
+
+        if (m_indexBufferAllocation) {
+            vmaFreeMemory(m_allocator, m_indexBufferAllocation);
+            m_indexBufferAllocation = VK_NULL_HANDLE;
         }
 
         if (m_allocator) {
@@ -609,7 +615,7 @@ namespace Bjorn
         // Fill the staging buffer with vertex data
         void* data = nullptr;
         vmaMapMemory(m_allocator, m_stagingBufferAllocation, &data);
-        memcpy(data, m_scene.GetVertices().data(), bufferSize);
+        memcpy(data, vertices.data(), bufferSize);
         vmaUnmapMemory(m_allocator, m_stagingBufferAllocation);
 
         // Vertex buffer creation with memory allocation
@@ -629,6 +635,38 @@ namespace Bjorn
 
         // Copy vertex data from shared buffer to GPU only vertex buffer
         CopyBuffer(m_stagingBuffer, m_vertexBuffer, bufferSize);
+    }
+
+    void Renderer::CreateIndexBuffer()
+    {
+        auto indices = m_scene.GetIndices();
+        vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+        // Fill the staging buffer with index data
+        void* data = nullptr;
+        vmaMapMemory(m_allocator, m_stagingBufferAllocation, &data);
+        memcpy(data, indices.data(), bufferSize);
+        vmaUnmapMemory(m_allocator, m_stagingBufferAllocation);
+
+        // Index buffer creation with memory allocation
+        VkBufferCreateInfo indexInfo{};
+        indexInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        indexInfo.size = bufferSize;
+        indexInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        indexInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo indexAllocInfo{};
+        indexAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+        VkBuffer rawBuffer;
+        VmaAllocation allocation;
+        vmaCreateBuffer(m_allocator, &indexInfo, &indexAllocInfo, &rawBuffer, &allocation, nullptr);
+
+        m_indexBuffer = vk::raii::Buffer(m_device, rawBuffer);
+        m_indexBufferAllocation = allocation;
+
+        // Copy index data from shared buffer to GPU only index buffer
+        CopyBuffer(m_stagingBuffer, m_indexBuffer, bufferSize);
     }
 
     void Renderer::CreateCommandBuffer()
@@ -702,9 +740,10 @@ namespace Bjorn
 
         // Bind vertex buffer
         m_commandBuffers[m_currentFrame].bindVertexBuffers(0, *m_vertexBuffer, { 0 });
+        m_commandBuffers[m_currentFrame].bindIndexBuffer(*m_indexBuffer, 0, vk::IndexType::eUint16);
 
         // Draw command
-        m_commandBuffers[m_currentFrame].draw(3, 1, 0, 0);
+        m_commandBuffers[m_currentFrame].drawIndexed(m_scene.GetIndices().size(), 1, 0, 0, 0);
 
         // Finish up rendering
         m_commandBuffers[m_currentFrame].endRendering();

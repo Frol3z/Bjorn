@@ -54,8 +54,12 @@ namespace Bjorn
 		VmaAllocator m_allocator;
 		vk::raii::Buffer m_stagingBuffer = nullptr;
 		VmaAllocation m_stagingBufferAllocation;
+
 		vk::raii::Buffer m_vertexBuffer = nullptr;
 		VmaAllocation m_vertexBufferAllocation;
+
+		vk::raii::Buffer m_indexBuffer = nullptr;
+		VmaAllocation m_indexBufferAllocation;
 
 		void CreateInstance();
 		void CreateSurface(); // May be moved to swapchain class
@@ -66,6 +70,7 @@ namespace Bjorn
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
 		void CreateVertexBuffer();
+		void CreateIndexBuffer();
 		void CreateCommandBuffer();
 		void CreateSyncObjects();
 

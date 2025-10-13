@@ -32,12 +32,17 @@ namespace Bjorn
 	{
 	public:
 		const std::vector<Vertex>& GetVertices() const { return vertices; }
+		const std::vector<uint16_t>& GetIndices() const { return indices; }
 	private:
 		std::vector<Vertex> vertices =
 		{
-			{{ 0.0f, -0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}},
-			{{ 0.5f,  0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}},
+			{{-0.5f, -0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}},
+			{{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}},
+			{{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}},
 			{{-0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}}
+		};
+		std::vector<uint16_t> indices = { // ! Change index type in the binding if modified
+			0, 1, 2, 2, 3, 0
 		};
 	};
 }
