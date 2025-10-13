@@ -4,6 +4,7 @@
 #include <vk_mem_alloc.h>
 
 #include "Swapchain.hpp"
+#include "Buffer.hpp"
 
 namespace Bjorn 
 {
@@ -52,14 +53,9 @@ namespace Bjorn
 		std::vector<vk::raii::Fence> m_inFlightFences;
 
 		VmaAllocator m_allocator;
-		vk::raii::Buffer m_stagingBuffer = nullptr;
-		VmaAllocation m_stagingBufferAllocation;
-
-		vk::raii::Buffer m_vertexBuffer = nullptr;
-		VmaAllocation m_vertexBufferAllocation;
-
-		vk::raii::Buffer m_indexBuffer = nullptr;
-		VmaAllocation m_indexBufferAllocation;
+		std::unique_ptr<Buffer> m_stagingBuffer = nullptr;
+		std::unique_ptr<Buffer> m_vertexBuffer = nullptr;
+		std::unique_ptr<Buffer> m_indexBuffer = nullptr;
 
 		void CreateInstance();
 		void CreateSurface(); // May be moved to swapchain class
@@ -88,6 +84,6 @@ namespace Bjorn
 			vk::PipelineStageFlags2 dstStageMask
 		);
 
-		void CopyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
+		void CopyBuffer(const VkBuffer& srcBuffer, const VkBuffer& dstBuffer, vk::DeviceSize size);
 	};
 }

@@ -77,6 +77,7 @@ add_executable(Bjorn
     "src/Renderer.cpp" 
     "src/Swapchain.cpp" 
     "src/VmaUsage.cpp"
+    "src/Buffer.cpp"
 )
 
 target_include_directories(Bjorn PRIVATE ${CMAKE_SOURCE_DIR}/include ${VMA_SOURCE_DIR}/include)
