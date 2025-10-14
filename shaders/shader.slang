@@ -1,37 +1,29 @@
-/*
-static float2 positions[3] = float2[](
-	float2(0.0, -0.5),
-	float2(0.5, 0.5),
-	float2(-0.5, 0.5)
-);
-
-static float3 colors[3] = float3[](
-	float3(1.0, 0.0, 0.0),
-	float3(0.0, 1.0, 0.0),
-	float3(0.0, 0.0, 1.0)
-);
-*/
-
 struct VertexInput {
     float3 position;
     float3 color;
 };
 
+struct UniformBuffer {
+    float4x4 model;
+    float4x4 view;
+    float4x4 proj;
+};
+ConstantBuffer<UniformBuffer> ubo;
+
 struct VertexOutput {
-    float3 color;
     float4 position : SV_Position;
+    float3 color;
 };
 
 [shader("vertex")]
 VertexOutput vertMain(uint vertexId: SV_VertexID, VertexInput input) {
     VertexOutput output;
+    output.position = mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.position, 1.0))));
     output.color = input.color;
-    output.position = float4(input.position, 1.0);
     return output;
 }
 
 [shader("fragment")]
 float4 fragMain(VertexOutput inVert) : SV_Target {
-    float3 color = inVert.color;
-    return float4(color, 1.0);
+    return float4(inVert.color, 1.0);
 }

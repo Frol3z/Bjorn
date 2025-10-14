@@ -1,10 +1,13 @@
 #include "Application.hpp"
+#include "Renderer.hpp"
 
 #include <GLFW/glfw3.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <chrono>
 
 // Validation layers
 #ifdef NDEBUG
@@ -35,10 +38,14 @@ namespace Bjorn
         CreateLogicalDevice();
         CreateMemoryAllocator();
         CreateSwapchain();
+        CreateDescriptorSetLayout();
         CreateGraphicsPipeline();
         CreateCommandPool();
         CreateVertexBuffer();
         CreateIndexBuffer();
+        CreateUniformBuffers();
+        CreateDescriptorPool();
+        CreateDescriptorSets();
         CreateCommandBuffer();
         CreateSyncObjects();
     }
@@ -49,6 +56,7 @@ namespace Bjorn
         m_stagingBuffer.reset();
         m_vertexBuffer.reset();
         m_indexBuffer.reset();
+        m_uniformBuffers.clear();
 
         // VMA allocator cleanup
         if (m_allocator) {
@@ -85,6 +93,8 @@ namespace Bjorn
         if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
             throw std::runtime_error("Failed to acquire swapchain image!");
         }
+
+        UpdateUniformBuffer();
 
         // Record command buffer and reset draw fence
         m_device.resetFences(*m_inFlightFences[m_currentFrame]);
@@ -129,6 +139,26 @@ namespace Bjorn
     void Renderer::WaitIdle()
     {
         m_device.waitIdle();
+    }
+
+    void Renderer::UpdateUniformBuffer()
+    {
+        static auto startTime = std::chrono::high_resolution_clock::now();
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+        UniformBufferObject ubo{};
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        auto swapchainExtent = m_swapchain->GetExtent();
+        ubo.proj = glm::perspective(
+            glm::radians(45.0f),
+            static_cast<float>(swapchainExtent.width) / static_cast<float>(swapchainExtent.height), 
+            0.1f, 10.0f
+        );
+        ubo.proj[1][1] *= -1; // flip the scaling factor of the Y axis
+
+        m_uniformBuffers[m_currentFrame]->LoadData(&ubo, sizeof(ubo));
     }
 
 	void Renderer::CreateInstance() 
@@ -380,6 +410,19 @@ namespace Bjorn
         m_swapchain = std::make_unique<Swapchain>(m_physicalDevice, m_device, m_window, m_surface);
     }
 
+    void Renderer::CreateDescriptorSetLayout()
+    {
+        vk::DescriptorSetLayoutBinding uboLayoutBinding{
+            0, vk::DescriptorType::eUniformBuffer, 1,
+            vk::ShaderStageFlagBits::eVertex, nullptr
+        };
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{
+            .bindingCount = 1, 
+            .pBindings = &uboLayoutBinding
+        };
+        m_descriptorSetLayout = vk::raii::DescriptorSetLayout(m_device, layoutInfo);
+    }
+
     void Renderer::CreateGraphicsPipeline()
     {
         // Create shader module
@@ -450,7 +493,7 @@ namespace Bjorn
             .rasterizerDiscardEnable = vk::False, // Disable rasterization (no output)
             .polygonMode = vk::PolygonMode::eFill, // For wireframe mode a GPU feature must be enabled
             .cullMode = vk::CullModeFlagBits::eBack, // Self explanatory
-            .frontFace = vk::FrontFace::eClockwise,
+            .frontFace = vk::FrontFace::eCounterClockwise,
             .depthBiasEnable = vk::False,
             .depthBiasSlopeFactor = 1.0f,
             .lineWidth = 1.0f
@@ -483,7 +526,8 @@ namespace Bjorn
 
         // Uniforms (not used yet)
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
-            .setLayoutCount = 0,
+            .setLayoutCount = 1,
+            .pSetLayouts = &*m_descriptorSetLayout,
             .pushConstantRangeCount = 0
         };
         m_pipelineLayout = vk::raii::PipelineLayout(m_device, pipelineLayoutInfo);
@@ -640,6 +684,69 @@ namespace Bjorn
         CopyBuffer(*m_stagingBuffer, *m_indexBuffer, bufferSize);
     }
 
+    void Renderer::CreateUniformBuffers()
+    {
+        m_uniformBuffers.clear();
+
+        vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            // Uniform buffer creation with memory allocation
+            vk::BufferCreateInfo bufferInfo{
+                .size = bufferSize,
+                .usage = vk::BufferUsageFlagBits::eUniformBuffer,
+            };
+            VmaAllocationCreateInfo allocInfo{ .usage = VMA_MEMORY_USAGE_CPU_TO_GPU };
+            m_uniformBuffers.emplace_back(std::make_unique<Buffer>(bufferInfo, allocInfo, m_allocator, true));
+        }
+    }
+
+    void Renderer::CreateDescriptorPool()
+    {
+        vk::DescriptorPoolSize poolSize{
+            .type = vk::DescriptorType::eUniformBuffer,
+            .descriptorCount = MAX_FRAMES_IN_FLIGHT
+        };
+        vk::DescriptorPoolCreateInfo poolInfo{
+            .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+            .maxSets = MAX_FRAMES_IN_FLIGHT,
+            .poolSizeCount = 1,
+            .pPoolSizes = &poolSize
+        };
+        m_descriptorPool = vk::raii::DescriptorPool(m_device, poolInfo);
+    }
+
+    void Renderer::CreateDescriptorSets()
+    {
+        // Descriptor sets allocation
+        std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *m_descriptorSetLayout);
+        vk::DescriptorSetAllocateInfo allocInfo{
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+            .pSetLayouts = layouts.data()
+        };
+        m_descriptorSets.clear();
+        m_descriptorSets = m_device.allocateDescriptorSets(allocInfo);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            vk::DescriptorBufferInfo bufferInfo{
+                .buffer = m_uniformBuffers[i]->GetHandle(),
+                .offset = 0,
+                .range = sizeof(UniformBufferObject)
+            };
+            vk::WriteDescriptorSet descriptorWrite{
+                .dstSet = m_descriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eUniformBuffer,
+                .pBufferInfo = &bufferInfo
+            };
+            m_device.updateDescriptorSets(descriptorWrite, {});
+        }
+    }
+
     void Renderer::CreateCommandBuffer()
     {
         // CommandBufferAllocateInfo
@@ -712,6 +819,12 @@ namespace Bjorn
         // Bind vertex and idnex buffer
         m_commandBuffers[m_currentFrame].bindVertexBuffers(0, m_vertexBuffer->GetHandle(), {0});
         m_commandBuffers[m_currentFrame].bindIndexBuffer(m_indexBuffer->GetHandle(), 0, vk::IndexType::eUint16);
+
+        // Bind descriptor sets
+        m_commandBuffers[m_currentFrame].bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics, m_pipelineLayout, 0,
+            *m_descriptorSets[m_currentFrame], nullptr
+        );
 
         // Draw command
         m_commandBuffers[m_currentFrame].drawIndexed(m_scene.GetIndices().size(), 1, 0, 0, 0);
