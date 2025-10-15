@@ -9,11 +9,6 @@ add_executable(Bjorn
     "Buffer.cpp"
 )
 
-# Path starts from the build directory
-set_target_properties(Bjorn PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-)
-
 # Includes
 target_include_directories(Bjorn PRIVATE ${VMA_SOURCE_DIR}/include)
 
