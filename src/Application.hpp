@@ -25,6 +25,7 @@ namespace Bjorn
 		std::unique_ptr<Renderer> m_renderer;
 
 		void Init();
+		void BuildScene();
 		void MainLoop();
 		void CleanUp();
 	};

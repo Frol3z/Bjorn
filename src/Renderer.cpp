@@ -75,8 +75,7 @@ namespace Bjorn
 
         // Check if window has been resized/minimize before trying to acquire next image
         if (m_app.isFramebufferResized.load()) {
-            m_app.isFramebufferResized.store(false);
-            m_swapchain->RecreateSwapchain();
+            UpdateOnFramebufferResized();
             return;
         }
 
@@ -86,8 +85,7 @@ namespace Bjorn
         // Check if the surface is still compatible with the swapchain or if it was resized/minimized
         // !!! Checking m_IsFramebufferResized guarantees prevents presentation to an invalid surface
         if (result == vk::Result::eErrorOutOfDateKHR || m_app.isFramebufferResized.load()) {
-            m_app.isFramebufferResized.store(false);
-            m_swapchain->RecreateSwapchain();
+            UpdateOnFramebufferResized();
             return;
         }
         if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
@@ -125,8 +123,7 @@ namespace Bjorn
 
         // Check again if presentation fails because the surface is now incompatible
         if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_app.isFramebufferResized.load()) {
-            m_app.isFramebufferResized.store(false);
-            m_swapchain->RecreateSwapchain();
+            UpdateOnFramebufferResized();
             return;
         }
         else if (result != vk::Result::eSuccess) {
@@ -149,6 +146,9 @@ namespace Bjorn
 
         UniformBufferObject ubo{};
         ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.f), glm::vec3(0.0f, 0.0f, 1.0f));
+        
+        // Reminder: assuming coord. system as X -> right, Y -> forward, Z -> up
+        /* TODO: remove once the Camera abstraction is completed
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         auto swapchainExtent = m_swapchain->GetExtent();
         ubo.proj = glm::perspective(
@@ -157,8 +157,19 @@ namespace Bjorn
             0.1f, 10.0f
         );
         ubo.proj[1][1] *= -1; // flip the scaling factor of the Y axis
+        */
+
+        ubo.view = m_scene.GetCamera().GetViewMatrix();
+        ubo.proj = m_scene.GetCamera().GetProjectionMatrix();
 
         m_uniformBuffers[m_currentFrame]->LoadData(&ubo, sizeof(ubo));
+    }
+
+    void Renderer::UpdateOnFramebufferResized()
+    {
+        m_app.isFramebufferResized.store(false);
+        m_swapchain->RecreateSwapchain();
+        // Update the camera right and bottom members and recompute the matrices
     }
 
 	void Renderer::CreateInstance() 

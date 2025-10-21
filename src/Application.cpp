@@ -10,13 +10,14 @@ namespace Bjorn
 		Init();
 
 		m_window = std::make_unique<Window>(windowWidth, windowHeight, m_name, *this);
-		m_scene = std::make_unique<Scene>();
+		m_scene = std::make_unique<Scene>(windowWidth, windowHeight);
 		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
+
+		BuildScene();
 	}
 
 	void Application::Run() 
 	{
-		Init();
 		MainLoop();
 		CleanUp();
 	}
@@ -24,6 +25,12 @@ namespace Bjorn
 	void Application::Init() 
 	{
 		glfwInit();
+	}
+
+	void Application::BuildScene()
+	{
+		// Set camera position
+		m_scene->GetCamera().SetPosition(glm::vec3(2.0f, 2.0f, 2.0f));
 	}
 
 	void Application::MainLoop() 

@@ -3,7 +3,6 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <vk_mem_alloc.h>
 
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 
 #include "Swapchain.hpp"
@@ -73,6 +72,7 @@ namespace Bjorn
 		std::vector<vk::raii::Fence> m_inFlightFences;
 
 		void UpdateUniformBuffer();
+		void UpdateOnFramebufferResized();
 
 		void CreateInstance();
 		void CreateSurface(); // May be moved to swapchain class
