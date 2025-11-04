@@ -14,6 +14,7 @@ namespace Bjorn
 	class Application;
 	class Window;
 	class Scene;
+	class Mesh;
 
 	struct UniformBufferObject
 	{
@@ -30,6 +31,9 @@ namespace Bjorn
 
 		void DrawFrame();
 		void WaitIdle();
+
+		bool Load(Mesh& mesh);
+		void CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size);
 
 	private:
 		Application& m_app; // Need to be able to modify the framebufferResized boolean
@@ -51,10 +55,6 @@ namespace Bjorn
 		std::unique_ptr<Swapchain> m_swapchain = nullptr;
 
 		VmaAllocator m_allocator;
-		std::unique_ptr<Buffer> m_stagingBuffer = nullptr;
-		std::unique_ptr<Buffer> m_vertexBuffer = nullptr;
-		std::unique_ptr<Buffer> m_indexBuffer = nullptr;
-
 		vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
 		std::vector<std::unique_ptr<Buffer>> m_uniformBuffers;
 
@@ -83,8 +83,6 @@ namespace Bjorn
 		void CreateDescriptorSetLayout();
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
-		void CreateVertexBuffer();
-		void CreateIndexBuffer();
 		void CreateUniformBuffers();
 		void CreateDescriptorPool();
 		void CreateDescriptorSets();
@@ -104,7 +102,5 @@ namespace Bjorn
 			vk::PipelineStageFlags2 srcStageMask,
 			vk::PipelineStageFlags2 dstStageMask
 		);
-
-		void CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size);
 	};
 }

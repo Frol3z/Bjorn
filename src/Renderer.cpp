@@ -1,6 +1,8 @@
 #include "Application.hpp"
 #include "Renderer.hpp"
 
+#include "Mesh.hpp"
+
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -41,8 +43,6 @@ namespace Bjorn
         CreateDescriptorSetLayout();
         CreateGraphicsPipeline();
         CreateCommandPool();
-        CreateVertexBuffer();
-        CreateIndexBuffer();
         CreateUniformBuffers();
         CreateDescriptorPool();
         CreateDescriptorSets();
@@ -53,9 +53,6 @@ namespace Bjorn
     Renderer::~Renderer()
     {
         // Destroying buffers before freeing up memory
-        m_stagingBuffer.reset();
-        m_vertexBuffer.reset();
-        m_indexBuffer.reset();
         m_uniformBuffers.clear();
 
         // VMA allocator cleanup
@@ -138,6 +135,11 @@ namespace Bjorn
         m_device.waitIdle();
     }
 
+    bool Renderer::Load(Mesh& mesh)
+    {
+        return mesh.Load(m_allocator, *this);
+    }
+
     void Renderer::UpdateUniformBuffer()
     {
         static auto startTime = std::chrono::high_resolution_clock::now();
@@ -148,17 +150,6 @@ namespace Bjorn
         ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.f), glm::vec3(0.0f, 0.0f, 1.0f));
         
         // Reminder: assuming coord. system as X -> right, Y -> forward, Z -> up
-        /* TODO: remove once the Camera abstraction is completed
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        auto swapchainExtent = m_swapchain->GetExtent();
-        ubo.proj = glm::perspective(
-            glm::radians(45.0f),
-            static_cast<float>(swapchainExtent.width) / static_cast<float>(swapchainExtent.height), 
-            0.1f, 10.0f
-        );
-        ubo.proj[1][1] *= -1; // flip the scaling factor of the Y axis
-        */
-
         ubo.view = m_scene.GetCamera().GetViewMatrix();
         ubo.proj = m_scene.GetCamera().GetProjectionMatrix();
 
@@ -606,95 +597,6 @@ namespace Bjorn
         m_commandPool = vk::raii::CommandPool(m_device, poolInfo);
     }
 
-    void Renderer::CreateVertexBuffer()
-    {
-        /*
-            ### Raw (no VMA) buffer creation process ###
-            
-            // Buffer creation (with no memory assigned to it yet)
-            auto vertices = m_scene.GetVertices();
-            vk::BufferCreateInfo bufferInfo{
-                .size = sizeof(vertices[0]) * vertices.size(),
-                .usage = vk::BufferUsageFlagBits::eVertexBuffer,
-                .sharingMode = vk::SharingMode::eExclusive
-            };
-            m_vertexBuffer = vk::raii::Buffer(m_device, bufferInfo);
-        
-            // Buffer memory allocation and binding
-            vk::MemoryRequirements memRequirements = m_vertexBuffer.getMemoryRequirements();
-            vk::MemoryAllocateInfo memoryAllocateInfo{
-                .allocationSize = memRequirements.size,
-                .memoryTypeIndex = FindMemoryType(
-                    memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-                )
-            };
-            m_vertexBufferMemory = vk::raii::DeviceMemory(m_device, memoryAllocateInfo);
-            m_vertexBuffer.bindMemory(*m_vertexBufferMemory, 0);
-
-            // Filling the GPU buffer with CPU data
-            void* data = m_vertexBufferMemory.mapMemory(0, bufferInfo.size);
-            memcpy(data, m_scene.GetVertices().data(), bufferInfo.size);
-            m_vertexBufferMemory.unmapMemory();
-        */
-
-        auto vertices = m_scene.GetVertices();
-        vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-        // Staging buffer creation
-        VkBufferCreateInfo stagingInfo{};
-        stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        stagingInfo.size = bufferSize;
-        stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        VmaAllocationCreateInfo stagingAllocInfo{};
-        stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-
-        m_stagingBuffer = std::make_unique<Buffer>(stagingInfo, stagingAllocInfo, m_allocator);
-
-        // Fill the staging buffer with vertex data
-        m_stagingBuffer->LoadData(vertices.data(), bufferSize);
-
-        // Vertex buffer creation with memory allocation
-        VkBufferCreateInfo vertexInfo{};
-        vertexInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        vertexInfo.size = bufferSize;
-        vertexInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        vertexInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        
-        VmaAllocationCreateInfo vertexAllocInfo{};
-        vertexAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-        
-        m_vertexBuffer = std::make_unique<Buffer>(vertexInfo, vertexAllocInfo, m_allocator);
-
-        // Copy vertex data from shared buffer to GPU only vertex buffer
-        CopyBuffer(*m_stagingBuffer, *m_vertexBuffer, bufferSize);
-    }
-
-    void Renderer::CreateIndexBuffer()
-    {
-        auto indices = m_scene.GetIndices();
-        vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-
-        // Fill the staging buffer with index data
-        m_stagingBuffer->LoadData(indices.data(), bufferSize);
-
-        // Index buffer creation with memory allocation
-        VkBufferCreateInfo indexInfo{};
-        indexInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        indexInfo.size = bufferSize;
-        indexInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        indexInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        VmaAllocationCreateInfo indexAllocInfo{};
-        indexAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-        m_indexBuffer = std::make_unique<Buffer>(indexInfo, indexAllocInfo, m_allocator);
-
-        // Copy index data from shared buffer to GPU only index buffer
-        CopyBuffer(*m_stagingBuffer, *m_indexBuffer, bufferSize);
-    }
-
     void Renderer::CreateUniformBuffers()
     {
         m_uniformBuffers.clear();
@@ -827,9 +729,10 @@ namespace Bjorn
         m_commandBuffers[m_currentFrame].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f));
         m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
 
-        // Bind vertex and idnex buffer
-        m_commandBuffers[m_currentFrame].bindVertexBuffers(0, m_vertexBuffer->GetHandle(), {0});
-        m_commandBuffers[m_currentFrame].bindIndexBuffer(m_indexBuffer->GetHandle(), 0, vk::IndexType::eUint16);
+        // Bind vertex and index buffer
+        const Mesh& mesh = m_app.GetMesh(); // TODO move to Scene class
+        m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), {0});
+        m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, vk::IndexType::eUint16);
 
         // Bind descriptor sets
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
@@ -838,7 +741,7 @@ namespace Bjorn
         );
 
         // Draw command
-        m_commandBuffers[m_currentFrame].drawIndexed(m_scene.GetIndices().size(), 1, 0, 0, 0);
+        m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
 
         // Finish up rendering
         m_commandBuffers[m_currentFrame].endRendering();

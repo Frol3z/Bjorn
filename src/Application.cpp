@@ -12,6 +12,7 @@ namespace Bjorn
 		m_window = std::make_unique<Window>(windowWidth, windowHeight, m_name, *this);
 		m_scene = std::make_unique<Scene>(windowWidth, windowHeight);
 		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
+		m_mesh = std::make_unique<Mesh>();
 
 		BuildScene();
 	}
@@ -31,6 +32,9 @@ namespace Bjorn
 	{
 		// Set camera position
 		m_scene->GetCamera().SetPosition(glm::vec3(2.0f, 2.0f, 2.0f));
+		
+		// Load mesh
+		m_renderer->Load(*m_mesh);
 	}
 
 	void Application::MainLoop() 
