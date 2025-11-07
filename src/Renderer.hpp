@@ -32,7 +32,7 @@ namespace Bjorn
 		void DrawFrame();
 		void WaitIdle();
 
-		bool Load(Mesh& mesh);
+		void LoadMesh(Mesh& mesh);
 		void CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size);
 
 	private:

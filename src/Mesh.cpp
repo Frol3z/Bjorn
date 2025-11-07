@@ -20,28 +20,30 @@
 
 namespace Bjorn
 {
-    Mesh::~Mesh()
+    Mesh::Mesh()
     {
-        m_vertexBuffer.reset();
-        m_indexBuffer.reset();
+        // TODO - remove this hardcoded data into a load from file or passed from the application functionality
+        m_vertices =
+        {
+            {{-0.5f, -0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}},
+            {{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}},
+            {{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}},
+            {{-0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}}
+        };
+
+        // NOTE - Change index type in the binding if modified
+        m_indices = {
+            0, 1, 2, 2, 3, 0
+        };
     }
 
-	bool Mesh::Load(const VmaAllocator& allocator, Renderer& renderer)
+    Mesh::~Mesh()
+    {
+        Unload();
+    }
+
+	void Mesh::Load(const VmaAllocator& allocator, Renderer& renderer)
 	{
-		// TODO - remove hardcoded data into load from file or passed from the application
-		m_vertices =
-		{
-			{{-0.5f, -0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}},
-			{{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}},
-			{{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}},
-			{{-0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}}
-		};
-
-		// ! Change index type in the binding if modified
-		m_indices = {
-			0, 1, 2, 2, 3, 0
-		};
-
         auto vertexDataSize = m_vertices.size() * sizeof(Vertex);
         if (!m_indices.empty())
         {
@@ -65,9 +67,13 @@ namespace Bjorn
         // correctly to GPU memory, so the staging buffer can be safely destroyed
         // since it won't be needed anymore
         DestroyStagingBuffer();
-
-        return true;
 	}
+
+    void Mesh::Unload()
+    {
+        m_vertexBuffer.reset();
+        m_indexBuffer.reset();
+    }
 
     void Mesh::CreateStagingBuffer(const VmaAllocator& allocator, vk::DeviceSize size)
     {        

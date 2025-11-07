@@ -1,23 +1,10 @@
 #pragma once
 
-#include <vulkan/vulkan_raii.hpp>
-#include <glm/glm.hpp>
-
 #include "Camera.hpp"
 #include "Mesh.hpp"
+#include "Object.hpp"
 
-#include <vector>
-
-// TODO
-// The Scene should expose to the user/application a functionality for doing something like scene.AddObject(object)
-// where object is an instance of class Object and will reference globally loaded resources like meshes, materials, textures, etc...
-// ...
-// 
-// 
-// TODO
-// Create an AssetManager/ResourceManager which will handle loading and unloading of meshes (and then material and others...)
-// This class will hold a list of objects that will reference those resources
-//
+#include <unordered_map>
 
 namespace Bjorn 
 {
@@ -25,10 +12,15 @@ namespace Bjorn
 	{
 	public:
 		Scene(float viewportWidth, float viewportHeight);
+		~Scene();
 
 		Camera& GetCamera() { return m_camera; }
 		const Camera& GetCamera() const { return m_camera; }
+
+		void AddObject(std::unique_ptr<Object> object);
+		const Object& GetObject(const std::string& name) const;
 	private:
 		Camera m_camera;
+		std::unordered_map<std::string, std::unique_ptr<Object>> m_objects;
 	};
 }

@@ -31,24 +31,16 @@ namespace Bjorn
 	class Mesh
 	{
 		public:
-
-			Mesh() = default;
+			Mesh();
 			~Mesh();
 
-			bool Load(const VmaAllocator& allocator, Renderer& renderer);
-
-			// For the future
-			//bool LoadFromFile();
-
-			// Free up buffers from GPU memory
-			//bool Unload();
+			void Load(const VmaAllocator& allocator, Renderer& renderer);
+			void Unload();
 			
-			// Getters for the buffers handles to be able to allow binding before the draw call
 			const Buffer& GetVertexBuffer() const { 
 				assert(m_vertexBuffer && "Vertex buffer not initialized");
 				return *m_vertexBuffer;
 			};
-
 			const Buffer& GetIndexBuffer() const { 
 				assert(m_indexBuffer && "Index buffer not initialized");
 				return *m_indexBuffer;

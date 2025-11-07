@@ -135,9 +135,9 @@ namespace Bjorn
         m_device.waitIdle();
     }
 
-    bool Renderer::Load(Mesh& mesh)
+    void Renderer::LoadMesh(Mesh& mesh)
     {
-        return mesh.Load(m_allocator, *this);
+        mesh.Load(m_allocator, *this);
     }
 
     void Renderer::UpdateUniformBuffer()
@@ -147,7 +147,8 @@ namespace Bjorn
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.f), glm::vec3(0.0f, 0.0f, 1.0f));
+        //ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.model = m_scene.GetObject("Quad").GetModelMatrix();
         
         // Reminder: assuming coord. system as X -> right, Y -> forward, Z -> up
         ubo.view = m_scene.GetCamera().GetViewMatrix();
@@ -730,7 +731,7 @@ namespace Bjorn
         m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
 
         // Bind vertex and index buffer
-        const Mesh& mesh = m_app.GetMesh(); // TODO move to Scene class
+        auto& mesh = m_scene.GetObject("Quad").GetMesh();
         m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), {0});
         m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, vk::IndexType::eUint16);
 
@@ -741,7 +742,7 @@ namespace Bjorn
         );
 
         // Draw command
-        m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
+       m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
 
         // Finish up rendering
         m_commandBuffers[m_currentFrame].endRendering();
