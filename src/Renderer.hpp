@@ -10,17 +10,35 @@
 
 namespace Bjorn 
 {
+	// Note that for greater number of concurrent frames
+	// the CPU might get ahead of the GPU causing latency
+	// between frames
+	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
+	// TODO: comment
+	constexpr uint32_t MAX_OBJECTS = 100;
+
 	// Fwd declaration
 	class Application;
 	class Window;
 	class Scene;
 	class Mesh;
 
-	struct UniformBufferObject
+	struct GlobalUBO
 	{
-		glm::mat4 model;
 		glm::mat4 view;
 		glm::mat4 proj;
+	};
+
+	struct ObjectData
+	{
+		glm::mat4 model;
+		// may be extended in the future
+	};
+
+	struct PushConstants
+	{
+		uint32_t objectIndex;
 	};
 
 	class Renderer 
@@ -56,10 +74,13 @@ namespace Bjorn
 
 		VmaAllocator m_allocator;
 		vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
-		std::vector<std::unique_ptr<Buffer>> m_uniformBuffers;
+		std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_globalUBOs;
+		std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;
 
 		vk::raii::DescriptorPool m_descriptorPool = nullptr;
 		std::vector<vk::raii::DescriptorSet> m_descriptorSets;
+
+		vk::PushConstantRange m_pushConstantRange;
 
 		vk::raii::PipelineLayout m_pipelineLayout = nullptr;
 		vk::raii::Pipeline m_graphicsPipeline = nullptr;
@@ -81,6 +102,7 @@ namespace Bjorn
 		void CreateMemoryAllocator();
 		void CreateSwapchain();
 		void CreateDescriptorSetLayout();
+		void CreatePushConstant();
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
 		void CreateUniformBuffers();

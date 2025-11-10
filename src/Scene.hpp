@@ -19,6 +19,8 @@ namespace Bjorn
 
 		void AddObject(std::unique_ptr<Object> object);
 		const Object& GetObject(const std::string& name) const;
+		std::vector<const Object*> GetObjects() const;
+
 	private:
 		Camera m_camera;
 		std::unordered_map<std::string, std::unique_ptr<Object>> m_objects;

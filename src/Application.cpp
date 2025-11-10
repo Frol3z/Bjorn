@@ -47,8 +47,14 @@ namespace Bjorn
 		auto obj = std::make_unique<Object>("Quad", rm.GetMesh("QuadMesh"));
 		Transform& t = obj->GetTransform();
 		t.Rotate(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		t.Translate(glm::vec3(1.0f, 0.0f, 0.0f));
+		t.Translate(glm::vec3(-1.0f, 0.0f, 0.0f));
 		m_scene->AddObject(std::move(obj));
+
+		auto obj2 = std::make_unique<Object>("Quad1", rm.GetMesh("QuadMesh"));
+		Transform& t2 = obj2->GetTransform();
+		t2.Rotate(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		t2.Translate(glm::vec3(1.0f, 0.0f, 0.0f));
+		m_scene->AddObject(std::move(obj2));
 	}
 
 	void Application::MainLoop() 

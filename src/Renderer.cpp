@@ -24,11 +24,6 @@ const std::vector validationLayers = // and FPS monitoring layer
     "VK_LAYER_LUNARG_monitor"
 };
 
-// Note that for greater number of concurrent frames
-// the CPU might get ahead of the GPU causing latency
-// between frames
-constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-
 namespace Bjorn 
 {
 	Renderer::Renderer(Application& app, const Window& window, const Scene& scene)
@@ -41,6 +36,7 @@ namespace Bjorn
         CreateMemoryAllocator();
         CreateSwapchain();
         CreateDescriptorSetLayout();
+        CreatePushConstant();
         CreateGraphicsPipeline();
         CreateCommandPool();
         CreateUniformBuffers();
@@ -52,8 +48,13 @@ namespace Bjorn
 
     Renderer::~Renderer()
     {
-        // Destroying buffers before freeing up memory
-        m_uniformBuffers.clear();
+        // Destroying buffers explicitly before freeing up memory
+        for (auto& buffer : m_globalUBOs) {
+            buffer.reset();
+        }
+        for (auto& buffer : m_objectSSBOs) {
+            buffer.reset();
+        }
 
         // VMA allocator cleanup
         if (m_allocator) {
@@ -142,19 +143,28 @@ namespace Bjorn
 
     void Renderer::UpdateUniformBuffer()
     {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+        //static auto startTime = std::chrono::high_resolution_clock::now();
+        //auto currentTime = std::chrono::high_resolution_clock::now();
+        //float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        UniformBufferObject ubo{};
-        //ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.model = m_scene.GetObject("Quad").GetModelMatrix();
+        // NOTE: assuming coord. system as X -> right, Y -> forward, Z -> up
         
-        // Reminder: assuming coord. system as X -> right, Y -> forward, Z -> up
-        ubo.view = m_scene.GetCamera().GetViewMatrix();
-        ubo.proj = m_scene.GetCamera().GetProjectionMatrix();
+        // Update the global uniform buffer
+        GlobalUBO globalUBO{};
+        globalUBO.view = m_scene.GetCamera().GetViewMatrix();
+        globalUBO.proj = m_scene.GetCamera().GetProjectionMatrix();
+        m_globalUBOs[m_currentFrame]->LoadData(&globalUBO, sizeof(globalUBO));
 
-        m_uniformBuffers[m_currentFrame]->LoadData(&ubo, sizeof(ubo));
+        // Fill the object data storage buffer
+        std::vector<const Object*> objects = m_scene.GetObjects();
+        std::vector<ObjectData> objectDatas;
+        for (const Object* obj : objects)
+        {
+            ObjectData data{};
+            data.model = obj->GetModelMatrix();
+            objectDatas.push_back(data);
+        }
+        m_objectSSBOs[m_currentFrame]->LoadData(objectDatas.data(), objectDatas.size() * sizeof(ObjectData));
     }
 
     void Renderer::UpdateOnFramebufferResized()
@@ -315,6 +325,19 @@ namespace Bjorn
             bool isSuitable = device.getProperties().apiVersion >= VK_API_VERSION_1_4;
             if (isSuitable) {
                 m_physicalDevice = device;
+
+                // Print physical device limits
+                std::cout <<
+                    "maxBoundDescriptorSets: " <<
+                    deviceProperties.properties.limits.maxBoundDescriptorSets <<
+                    std::endl <<
+                    "maxUniformBufferRange: " <<
+                    deviceProperties.properties.limits.maxUniformBufferRange <<
+                    std::endl <<
+                    "maxStorageBufferRange: " <<
+                    deviceProperties.properties.limits.maxStorageBufferRange <<
+                    std::endl;
+
                 break;
             }
         }
@@ -415,21 +438,42 @@ namespace Bjorn
 
     void Renderer::CreateDescriptorSetLayout()
     {
-        vk::DescriptorSetLayoutBinding uboLayoutBinding{
+        // TODO:
+        // - add a new binding for the per object data buffer
+        
+        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        
+        // Binding 0 -> global UBO
+        bindings[0] = vk::DescriptorSetLayoutBinding{
             0, vk::DescriptorType::eUniformBuffer, 1,
             vk::ShaderStageFlagBits::eVertex, nullptr
         };
+
+        // Binding 1 -> object SSBO
+        bindings[1] = vk::DescriptorSetLayoutBinding{
+            1, vk::DescriptorType::eStorageBuffer, 1,
+            vk::ShaderStageFlagBits::eVertex, nullptr
+        };
+
+        // Create descriptor set layout
         vk::DescriptorSetLayoutCreateInfo layoutInfo{
-            .bindingCount = 1, 
-            .pBindings = &uboLayoutBinding
+            .bindingCount = static_cast<uint32_t>(bindings.size()),
+            .pBindings = bindings.data()
         };
         m_descriptorSetLayout = vk::raii::DescriptorSetLayout(m_device, layoutInfo);
+    }
+
+    void Renderer::CreatePushConstant()
+    {
+        m_pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex;
+        m_pushConstantRange.offset = 0;
+        m_pushConstantRange.size = sizeof(PushConstants);
     }
 
     void Renderer::CreateGraphicsPipeline()
     {
         // Create shader module
-        auto shaderPath = std::filesystem::current_path() / "../shaders/shader.spv";
+        auto shaderPath = std::filesystem::current_path() / "../shaders/_shader.spv";
         vk::raii::ShaderModule shaderModule = CreateShaderModule(ReadFile(shaderPath.string()));
 
         // ShaderStageCreateInfo
@@ -527,11 +571,12 @@ namespace Bjorn
             .pAttachments = &colorBlendAttachment
         };
 
-        // Uniforms (not used yet)
+        // Uniforms
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
             .setLayoutCount = 1,
             .pSetLayouts = &*m_descriptorSetLayout,
-            .pushConstantRangeCount = 0
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &m_pushConstantRange
         };
         m_pipelineLayout = vk::raii::PipelineLayout(m_device, pipelineLayoutInfo);
 
@@ -600,32 +645,38 @@ namespace Bjorn
 
     void Renderer::CreateUniformBuffers()
     {
-        m_uniformBuffers.clear();
-
-        vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            // Uniform buffer creation with memory allocation
-            vk::BufferCreateInfo bufferInfo{
-                .size = bufferSize,
-                .usage = vk::BufferUsageFlagBits::eUniformBuffer,
-            };
-            VmaAllocationCreateInfo allocInfo{ .usage = VMA_MEMORY_USAGE_CPU_TO_GPU };
-            m_uniformBuffers.emplace_back(std::make_unique<Buffer>(bufferInfo, allocInfo, m_allocator, true));
+            // Global uniform buffer creation
+            vk::BufferCreateInfo uboInfo{};
+            uboInfo.size = sizeof(GlobalUBO);
+            uboInfo.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+            VmaAllocationCreateInfo uboAllocInfo{};
+            uboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+            m_globalUBOs[i] = std::make_unique<Buffer>(uboInfo, uboAllocInfo, m_allocator, true);
+
+            // Object data storage buffer creation
+            vk::BufferCreateInfo ssboInfo{};
+            ssboInfo.size = sizeof(ObjectData) * MAX_OBJECTS;
+            ssboInfo.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+            VmaAllocationCreateInfo ssboAllocInfo{};
+            ssboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+            m_objectSSBOs[i] = std::make_unique<Buffer>(ssboInfo, ssboAllocInfo, m_allocator, true);
         }
     }
 
     void Renderer::CreateDescriptorPool()
     {
-        vk::DescriptorPoolSize poolSize{
-            .type = vk::DescriptorType::eUniformBuffer,
-            .descriptorCount = MAX_FRAMES_IN_FLIGHT
+        std::array<vk::DescriptorPoolSize, 2> poolSizes{
+            vk::DescriptorPoolSize { .type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
+            vk::DescriptorPoolSize { .type = vk::DescriptorType::eStorageBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT }
         };
+
         vk::DescriptorPoolCreateInfo poolInfo{
             .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
             .maxSets = MAX_FRAMES_IN_FLIGHT,
-            .poolSizeCount = 1,
-            .pPoolSizes = &poolSize
+            .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+            .pPoolSizes = poolSizes.data()
         };
         m_descriptorPool = vk::raii::DescriptorPool(m_device, poolInfo);
     }
@@ -639,25 +690,46 @@ namespace Bjorn
             .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
             .pSetLayouts = layouts.data()
         };
-        m_descriptorSets.clear();
         m_descriptorSets = m_device.allocateDescriptorSets(allocInfo);
 
+        // Bind the actual buffers to the descriptor sets
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            vk::DescriptorBufferInfo bufferInfo{
-                .buffer = m_uniformBuffers[i]->GetHandle(),
+            vk::DescriptorBufferInfo globalUBOInfo{
+                .buffer = m_globalUBOs[i]->GetHandle(),
                 .offset = 0,
-                .range = sizeof(UniformBufferObject)
+                .range = sizeof(GlobalUBO)
             };
-            vk::WriteDescriptorSet descriptorWrite{
+            vk::DescriptorBufferInfo objectSSBOInfo{
+                .buffer = m_objectSSBOs[i]->GetHandle(),
+                .offset = 0,
+                .range = sizeof(ObjectData) * MAX_OBJECTS
+            };
+
+            constexpr size_t bindingsCount = 2;
+            std::array<vk::WriteDescriptorSet, bindingsCount> descriptorWrites{};
+
+            // Binding 0 -> Global UBO
+            descriptorWrites[0] = vk::WriteDescriptorSet {
                 .dstSet = m_descriptorSets[i],
                 .dstBinding = 0,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
                 .descriptorType = vk::DescriptorType::eUniformBuffer,
-                .pBufferInfo = &bufferInfo
+                .pBufferInfo = &globalUBOInfo
             };
-            m_device.updateDescriptorSets(descriptorWrite, {});
+
+            // Binding 1 -> Object SSBO
+            descriptorWrites[1] = vk::WriteDescriptorSet {
+                .dstSet = m_descriptorSets[i],
+                .dstBinding = 1,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo = &objectSSBOInfo
+            };
+
+            m_device.updateDescriptorSets(descriptorWrites, {});
         }
     }
 
@@ -730,19 +802,38 @@ namespace Bjorn
         m_commandBuffers[m_currentFrame].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f));
         m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
 
-        // Bind vertex and index buffer
-        auto& mesh = m_scene.GetObject("Quad").GetMesh();
-        m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), {0});
-        m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, vk::IndexType::eUint16);
-
         // Bind descriptor sets
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics, m_pipelineLayout, 0,
             *m_descriptorSets[m_currentFrame], nullptr
         );
+        
+        // Draw all the objects
+        std::vector<const Object*> objects = m_scene.GetObjects();
+        for (uint32_t i = 0; i < objects.size(); i++)
+        {
+            const Object* obj = objects[i];
+            
+            // Push object index
+            //const PushConstants pc{ i };
+            //std::array<PushConstants, 1> pcArray{ pc };
 
-        // Draw command
-       m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
+            PushConstants pc{ i };
+            m_commandBuffers[m_currentFrame].pushConstants(
+                *m_pipelineLayout,
+                vk::ShaderStageFlagBits::eVertex,
+                0,
+                vk::ArrayProxy<const PushConstants>(1, &pc)
+            );
+
+            // Bind vertex and index buffer
+            auto& mesh = obj->GetMesh();
+            m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
+            m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, vk::IndexType::eUint16);
+
+            // Draw call
+            m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
+        }
 
         // Finish up rendering
         m_commandBuffers[m_currentFrame].endRendering();

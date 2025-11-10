@@ -28,4 +28,13 @@ namespace Bjorn
 		}
 		return *(it->second);
 	}
+
+	std::vector<const Object*> Scene::GetObjects() const
+	{
+		std::vector<const Object*> objects;
+		objects.reserve(m_objects.size());
+		for (const auto& [_, obj] : m_objects)
+			objects.push_back(obj.get());
+		return objects;
+	}
 };
