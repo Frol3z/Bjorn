@@ -8,7 +8,7 @@
 #include "Swapchain.hpp"
 #include "Buffer.hpp"
 
-namespace Bjorn 
+namespace Bjorn
 {
 	// Note that for greater number of concurrent frames
 	// the CPU might get ahead of the GPU causing latency
@@ -41,88 +41,87 @@ namespace Bjorn
 		uint32_t objectIndex;
 	};
 
-	class Renderer 
+	class Renderer
 	{
-	public:
-		Renderer(Application& app, const Window& window, const Scene& scene);
-		~Renderer();
+		public:
+			Renderer(Application& app, const Window& window, const Scene& scene);
+			~Renderer();
 
-		void DrawFrame();
-		void WaitIdle();
+			void DrawFrame();
+			void WaitIdle();
+			void LoadMesh(Mesh& mesh);
+			void CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size);
 
-		void LoadMesh(Mesh& mesh);
-		void CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size);
+		private:
+			void UpdateUniformBuffer();
+			void UpdateOnFramebufferResized();
 
-	private:
-		Application& m_app; // Need to be able to modify the framebufferResized boolean
-		const Window& m_window;
-		const Scene& m_scene;
+			void CreateInstance();
+			void CreateSurface();
+			void SelectPhysicalDevice();
+			void CreateLogicalDevice();
+			void CreateMemoryAllocator();
+			void CreateSwapchain();
+			void CreateDescriptorSetLayout();
+			void CreatePushConstant();
+			void CreateGraphicsPipeline();
+			void CreateCommandPool();
+			void CreateUniformBuffers();
+			void CreateDescriptorPool();
+			void CreateDescriptorSets();
+			void CreateCommandBuffer();
+			void CreateSyncObjects();
 
-		uint32_t m_currentFrame = 0;
+			[[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const;
+			static std::vector<char> ReadFile(const std::string& filename);
 
-		vk::raii::Context m_context;
-		vk::raii::Instance m_instance = nullptr;
-		vk::raii::SurfaceKHR m_surface = nullptr;
+			void RecordCommandBuffer(uint32_t imageIndex);
+			void TransitionImageLayout(
+				uint32_t imageIndex,
+				vk::ImageLayout oldLayout,
+				vk::ImageLayout newLayout,
+				vk::AccessFlags2 srcAccessMask,
+				vk::AccessFlags2 dstAccessMask,
+				vk::PipelineStageFlags2 srcStageMask,
+				vk::PipelineStageFlags2 dstStageMask
+			);
 
-		vk::raii::PhysicalDevice m_physicalDevice = nullptr;
-		vk::raii::Device m_device = nullptr;
-		vk::raii::Queue m_graphicsQueue = nullptr;
-		vk::raii::Queue m_presentQueue = nullptr;
-		uint32_t m_graphicsQueueFamilyIndex;
+			Application& m_app; // Need to be able to modify the framebufferResized boolean
+			const Window& m_window;
+			const Scene& m_scene;
 
-		std::unique_ptr<Swapchain> m_swapchain = nullptr;
+			uint32_t m_currentFrame = 0;
 
-		VmaAllocator m_allocator;
-		vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
-		std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_globalUBOs;
-		std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;
+			vk::raii::Context m_context; // Used as a dynamic loader
+			vk::raii::Instance m_instance = nullptr;
+			vk::raii::SurfaceKHR m_surface = nullptr;
 
-		vk::raii::DescriptorPool m_descriptorPool = nullptr;
-		std::vector<vk::raii::DescriptorSet> m_descriptorSets;
+			vk::raii::PhysicalDevice m_physicalDevice = nullptr;
+			vk::raii::Device m_device = nullptr;
+			vk::raii::Queue m_graphicsQueue = nullptr;
+			vk::raii::Queue m_presentQueue = nullptr;
+			uint32_t m_graphicsQueueFamilyIndex;
 
-		vk::PushConstantRange m_pushConstantRange;
+			std::unique_ptr<Swapchain> m_swapchain = nullptr;
 
-		vk::raii::PipelineLayout m_pipelineLayout = nullptr;
-		vk::raii::Pipeline m_graphicsPipeline = nullptr;
+			VmaAllocator m_allocator;
+			vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
+			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_globalUBOs;
+			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;
 
-		vk::raii::CommandPool m_commandPool = nullptr;
-		std::vector<vk::raii::CommandBuffer> m_commandBuffers;
+			vk::raii::DescriptorPool m_descriptorPool = nullptr;
+			std::vector<vk::raii::DescriptorSet> m_descriptorSets;
 
-		std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
-		std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
-		std::vector<vk::raii::Fence> m_inFlightFences;
+			vk::PushConstantRange m_pushConstantRange;
 
-		void UpdateUniformBuffer();
-		void UpdateOnFramebufferResized();
+			vk::raii::PipelineLayout m_pipelineLayout = nullptr;
+			vk::raii::Pipeline m_graphicsPipeline = nullptr;
 
-		void CreateInstance();
-		void CreateSurface(); // May be moved to swapchain class
-		void SelectPhysicalDevice();
-		void CreateLogicalDevice();
-		void CreateMemoryAllocator();
-		void CreateSwapchain();
-		void CreateDescriptorSetLayout();
-		void CreatePushConstant();
-		void CreateGraphicsPipeline();
-		void CreateCommandPool();
-		void CreateUniformBuffers();
-		void CreateDescriptorPool();
-		void CreateDescriptorSets();
-		void CreateCommandBuffer();
-		void CreateSyncObjects();
+			vk::raii::CommandPool m_commandPool = nullptr;
+			std::vector<vk::raii::CommandBuffer> m_commandBuffers;
 
-		[[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const;
-		static std::vector<char> ReadFile(const std::string& filename);
-
-		void RecordCommandBuffer(uint32_t imageIndex);
-		void TransitionImageLayout(
-			uint32_t imageIndex,
-			vk::ImageLayout oldLayout,
-			vk::ImageLayout newLayout,
-			vk::AccessFlags2 srcAccessMask,
-			vk::AccessFlags2 dstAccessMask,
-			vk::PipelineStageFlags2 srcStageMask,
-			vk::PipelineStageFlags2 dstStageMask
-		);
+			std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
+			std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
+			std::vector<vk::raii::Fence> m_inFlightFences;
 	};
 }

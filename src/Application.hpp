@@ -4,9 +4,6 @@
 #include "Renderer.hpp"
 #include "Scene.hpp"
 
-// TODO remove
-#include "Mesh.hpp"
-
 #include <atomic>
 
 namespace Bjorn 

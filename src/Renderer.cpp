@@ -4,31 +4,30 @@
 #include "Mesh.hpp"
 
 #include <GLFW/glfw3.h>
-#include <glm/gtc/matrix_transform.hpp>
 
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include <chrono>
-
-// Validation layers
-#ifdef NDEBUG
-    constexpr bool enableValidationLayers = false;
-#else
-    constexpr bool enableValidationLayers = true;
-#endif
-
-const std::vector validationLayers = // and FPS monitoring layer
-{
-    "VK_LAYER_KHRONOS_validation",
-    "VK_LAYER_LUNARG_monitor"
-};
 
 namespace Bjorn 
 {
+    // Validation layers
+    #ifdef NDEBUG
+        constexpr bool enableValidationLayers = false;
+    #else
+        constexpr bool enableValidationLayers = true;
+    #endif
+
+    const std::vector validationLayers =
+    {
+        "VK_LAYER_KHRONOS_validation",  // Khronos validation layers
+        "VK_LAYER_LUNARG_monitor"       // FPS monitoring layer
+    };
+
 	Renderer::Renderer(Application& app, const Window& window, const Scene& scene)
         : m_app(app), m_window(window), m_scene(scene)
     {
+        // Vulkan backend initialization
         CreateInstance();
         CreateSurface();
         SelectPhysicalDevice();
@@ -177,7 +176,8 @@ namespace Bjorn
 	void Renderer::CreateInstance() 
     {
         // Optional appInfo struct
-        const vk::ApplicationInfo appInfo{
+        const vk::ApplicationInfo appInfo
+        {
             .pApplicationName = m_app.GetName().c_str(),
             .applicationVersion = VK_MAKE_VERSION(1,0,0),
             .pEngineName = "No Engine",
@@ -191,26 +191,22 @@ namespace Bjorn
        
         #ifdef _DEBUG
             std::cout << "Available instance layer:" << std::endl;
-            for (const auto& layer : layerProperties) {
+            for (const auto& layer : layerProperties) 
                 std::cout << '\t' << layer.layerName << std::endl;
-            }
-
             std::cout << "Available instance extensions:" << std::endl;
-            for (const auto& extension : extensionProperties) {
+            for (const auto& extension : extensionProperties)
                 std::cout << '\t' << extension.extensionName << std::endl;
-            }
         #endif
 
-        // Get the required instance layers
+        // Get the required instance LAYERS
         std::vector<char const*> requiredLayers;
         // Validation layers (optional)
-        if (enableValidationLayers) {
+        if (enableValidationLayers)
             requiredLayers.assign(validationLayers.begin(), validationLayers.end());
-        }
         
-        // ADD HERE OTHER INSTANCE LAYERS IF NEEDED
+        // NOTE: add here additional LAYERS if needed (append to requiredLayers)
         
-        // Check if the required layers are supported by the Vulkan implementation
+        // Check if the required LAYERS are supported by the Vulkan implementation
         if (std::ranges::any_of(requiredLayers, [&layerProperties](auto const& requiredLayer) {
             return std::ranges::none_of(layerProperties,
                 [requiredLayer](auto const& layerProperty)
@@ -220,12 +216,9 @@ namespace Bjorn
             throw std::runtime_error("One or more required layers are not supported!");
         }
 
-        // Get the required instance extensions from GLFW
+        // Get the required instance EXTENSIONS from GLFW (e.g. VK_KHR_surface, VK_KHR_win32_surface)
         uint32_t glfwExtensionCount = 0;
         auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-        //std::cout << glfwExtensionCount << std::endl; = 2
-        
-        // ADD HERE OTHER INSTANCE EXTENSIONS IF NEEDED
         
         // Check if the required GLFW extensions are supported by the Vulkan implementation
         for (uint32_t i = 0; i < glfwExtensionCount; i++) {
@@ -237,8 +230,11 @@ namespace Bjorn
             }
         }
 
+        // NOTE: add here additional EXTENSIONS if needed
+
         // Vulkan instance creation
-        vk::InstanceCreateInfo createInfo{
+        vk::InstanceCreateInfo createInfo
+        {
             .pApplicationInfo = &appInfo,
             .enabledLayerCount = static_cast<uint32_t>(requiredLayers.size()),
             .ppEnabledLayerNames = requiredLayers.data(),
@@ -246,98 +242,103 @@ namespace Bjorn
             .ppEnabledExtensionNames = glfwExtensions
         };
 
-        try {
+        try
+        {
             m_instance = vk::raii::Instance(m_context, createInfo);
         }
-        catch (const vk::SystemError& err) {
+        catch (const vk::SystemError& err)
+        {
             std::cerr << "Vulkan error: " << err.what() << std::endl;
         }
     }
 
-    void Renderer::CreateSurface() 
+    void Renderer::CreateSurface()
     {
         VkSurfaceKHR _surface;
-        if (glfwCreateWindowSurface(*m_instance, m_window.GetHandle(), nullptr, &_surface) != 0) {
+        if (glfwCreateWindowSurface(*m_instance, m_window.GetHandle(), nullptr, &_surface) != 0)
             throw std::runtime_error("Failed to create window surface!");
-        }
         m_surface = vk::raii::SurfaceKHR(m_instance, _surface);
     }
 
     void Renderer::SelectPhysicalDevice() 
     {
         auto devices = m_instance.enumeratePhysicalDevices();
-        if (devices.empty()) {
+        if (devices.empty())
             throw std::runtime_error("Failed to find GPUs with Vulkan support!");
-        }
 
         // List available devices
         #ifdef _DEBUG
             std::cout << "Available devices:" << std::endl;
-            for (const auto& device : devices) {
-                // If it is useful to query for raytracing property keep using VkPhysicalDeviceProperties2
-                // else revert to VkPhysicalDeviceProperties
-                auto deviceProperties = device.getProperties2();
+        #endif
+        for (const auto& device : devices) 
+        {
+            // Print stuff if needed
+            // TODO: reorganize this block of code because it's terrible :/
+            #ifdef _DEBUG
+            // If it is useful to query for raytracing property keep using VkPhysicalDeviceProperties2
+            // else revert to VkPhysicalDeviceProperties
+            auto deviceProperties = device.getProperties2();
 
-                // Other queriable stuff if ever needed
-                //auto deviceFeatures = device.getFeatures2();
-                //auto extensions = device.enumerateDeviceExtensionProperties();
-                //auto queueFamilyProperties = device.getQueueFamilyProperties();
+            // Other queriable stuff if ever needed
+            //auto deviceFeatures = device.getFeatures2();
+            //auto extensions = device.enumerateDeviceExtensionProperties();
+            //auto queueFamilyProperties = device.getQueueFamilyProperties();
 
-                // Device properties
-                std::cout << '\t' << "- " << deviceProperties.properties.deviceName << std::endl;
-                //std::cout << '\t' << "API version: " << deviceProperties.properties.apiVersion << std::endl;
-                //std::cout << '\t' << "Driver version: " << deviceProperties.properties.driverVersion << std::endl;
-                //std::cout << '\t' << "Vendor ID: " << deviceProperties.properties.vendorID << std::endl;
-                //std::cout << '\t' << "ID: " << deviceProperties.properties.deviceID << std::endl;
-                /*
-                switch (deviceProperties.properties.deviceType) {
-                    case vk::PhysicalDeviceType::eOther: {
-                        std::cout << '\t' << "Type: " << "Other" << std::endl;
-                        break;
-                    }
-                    case vk::PhysicalDeviceType::eIntegratedGpu: {
-                        std::cout << '\t' << "Type: " << "Integrated GPU" << std::endl;
-                        break;
-                    }
-                    case vk::PhysicalDeviceType::eDiscreteGpu: {
-                        std::cout << '\t' << "Type: " << "Discrete GPU" << std::endl;
-                        break;
-                    }
-                    case vk::PhysicalDeviceType::eVirtualGpu: {
-                        std::cout << '\t' << "Type: " << "Virtual GPU" << std::endl;
-                        break;
-                    }
-                    case vk::PhysicalDeviceType::eCpu: {
-                        std::cout << '\t' << "Type: " << "CPU" << std::endl;
-                        break;
-                    }
+            // Device properties
+            std::cout << '\t' << "- " << deviceProperties.properties.deviceName << std::endl;
+            //std::cout << '\t' << "API version: " << deviceProperties.properties.apiVersion << std::endl;
+            //std::cout << '\t' << "Driver version: " << deviceProperties.properties.driverVersion << std::endl;
+            //std::cout << '\t' << "Vendor ID: " << deviceProperties.properties.vendorID << std::endl;
+            //std::cout << '\t' << "ID: " << deviceProperties.properties.deviceID << std::endl;
+            /*
+            switch (deviceProperties.properties.deviceType) {
+                case vk::PhysicalDeviceType::eOther: {
+                    std::cout << '\t' << "Type: " << "Other" << std::endl;
+                    break;
                 }
-                */
-                /*
-                    std::cout << '\t' << "Supported extensions:" << std::endl;
-                    for (const auto& extension : extensions) {
-                        std::cout << "\t\t - " << extension.extensionName << std::endl;
-                    }
-                */
+                case vk::PhysicalDeviceType::eIntegratedGpu: {
+                    std::cout << '\t' << "Type: " << "Integrated GPU" << std::endl;
+                    break;
+                }
+                case vk::PhysicalDeviceType::eDiscreteGpu: {
+                    std::cout << '\t' << "Type: " << "Discrete GPU" << std::endl;
+                    break;
+                }
+                case vk::PhysicalDeviceType::eVirtualGpu: {
+                    std::cout << '\t' << "Type: " << "Virtual GPU" << std::endl;
+                    break;
+                }
+                case vk::PhysicalDeviceType::eCpu: {
+                    std::cout << '\t' << "Type: " << "CPU" << std::endl;
+                    break;
+                }
+            }
+            */
+            /*
+                std::cout << '\t' << "Supported extensions:" << std::endl;
+                for (const auto& extension : extensions) {
+                    std::cout << "\t\t - " << extension.extensionName << std::endl;
+                }
+            */
+
+            // Print physical device limits
+            std::cout <<
+                "maxBoundDescriptorSets: " <<
+                deviceProperties.properties.limits.maxBoundDescriptorSets <<
+                std::endl <<
+                "maxUniformBufferRange: " <<
+                deviceProperties.properties.limits.maxUniformBufferRange <<
+                std::endl <<
+                "maxStorageBufferRange: " <<
+                deviceProperties.properties.limits.maxStorageBufferRange <<
+                std::endl;
             #endif
 
-            // Check for suitability (TODO: properly check for raytracing extensions support)
+            // Check for suitability
+            // TODO: add a proper check
             bool isSuitable = device.getProperties().apiVersion >= VK_API_VERSION_1_4;
             if (isSuitable) {
                 m_physicalDevice = device;
-
-                // Print physical device limits
-                std::cout <<
-                    "maxBoundDescriptorSets: " <<
-                    deviceProperties.properties.limits.maxBoundDescriptorSets <<
-                    std::endl <<
-                    "maxUniformBufferRange: " <<
-                    deviceProperties.properties.limits.maxUniformBufferRange <<
-                    std::endl <<
-                    "maxStorageBufferRange: " <<
-                    deviceProperties.properties.limits.maxStorageBufferRange <<
-                    std::endl;
-
                 break;
             }
         }
@@ -368,7 +369,7 @@ namespace Bjorn
             .pQueuePriorities = &queuePriority
         };
 
-        // Create a chain of feature structures to enable multiple new features (on top of those of VK 1.0) all at once
+        // Create a chain of feature structures to enable multiple new features (on top of those of Vulkan 1.0) all at once
         vk::StructureChain<
             vk::PhysicalDeviceFeatures2,
             vk::PhysicalDeviceVulkan13Features,

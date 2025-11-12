@@ -61,6 +61,9 @@ namespace Bjorn
 	{
 		while (!m_window->ShouldClose()) {
 			glfwPollEvents();
+
+			// User interaction with the scene
+
 			m_renderer->DrawFrame();
 		}
 		m_renderer->WaitIdle(); // Wait for pending GPU operations to finish
