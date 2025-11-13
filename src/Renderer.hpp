@@ -5,6 +5,7 @@
 
 #include <glm/glm.hpp>
 
+#include "Device.hpp"
 #include "Swapchain.hpp"
 #include "Buffer.hpp"
 
@@ -58,9 +59,7 @@ namespace Bjorn
 
 			void CreateInstance();
 			void CreateSurface();
-			void SelectPhysicalDevice();
-			void CreateLogicalDevice();
-			void CreateMemoryAllocator();
+			void CreateDevice();
 			void CreateSwapchain();
 			void CreateDescriptorSetLayout();
 			void CreatePushConstant();
@@ -95,16 +94,12 @@ namespace Bjorn
 			vk::raii::Context m_context; // Used as a dynamic loader
 			vk::raii::Instance m_instance = nullptr;
 			vk::raii::SurfaceKHR m_surface = nullptr;
+			std::unique_ptr<Device> m_device = nullptr;
 
-			vk::raii::PhysicalDevice m_physicalDevice = nullptr;
-			vk::raii::Device m_device = nullptr;
-			vk::raii::Queue m_graphicsQueue = nullptr;
-			vk::raii::Queue m_presentQueue = nullptr;
-			uint32_t m_graphicsQueueFamilyIndex;
+
 
 			std::unique_ptr<Swapchain> m_swapchain = nullptr;
 
-			VmaAllocator m_allocator;
 			vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_globalUBOs;
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;

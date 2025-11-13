@@ -30,9 +30,7 @@ namespace Bjorn
         // Vulkan backend initialization
         CreateInstance();
         CreateSurface();
-        SelectPhysicalDevice();
-        CreateLogicalDevice();
-        CreateMemoryAllocator();
+        CreateDevice();
         CreateSwapchain();
         CreateDescriptorSetLayout();
         CreatePushConstant();
@@ -54,21 +52,15 @@ namespace Bjorn
         for (auto& buffer : m_objectSSBOs) {
             buffer.reset();
         }
-
-        // VMA allocator cleanup
-        if (m_allocator) {
-            vmaDestroyAllocator(m_allocator);
-            m_allocator = VK_NULL_HANDLE;
-        }
     }
 
     void Renderer::DrawFrame()
     {
         // CPU will wait until the GPU finishes rendering the previous frame (corresponding to the same swapchain image index)
-        while (vk::Result::eTimeout == m_device.waitForFences(*m_inFlightFences[m_currentFrame], vk::True, UINT64_MAX));
+        while (vk::Result::eTimeout == m_device->GetDevice().waitForFences(*m_inFlightFences[m_currentFrame], vk::True, UINT64_MAX));
 
         // Wait for the presentation to release the semaphore
-        m_presentQueue.waitIdle();
+        m_device->GetPresentQueue().waitIdle();
 
         // Check if window has been resized/minimize before trying to acquire next image
         if (m_app.isFramebufferResized.load()) {
@@ -92,7 +84,7 @@ namespace Bjorn
         UpdateUniformBuffer();
 
         // Record command buffer and reset draw fence
-        m_device.resetFences(*m_inFlightFences[m_currentFrame]);
+        m_device->GetDevice().resetFences(*m_inFlightFences[m_currentFrame]);
         RecordCommandBuffer(imageIndex);
 
         // Submit commands to the queue
@@ -106,7 +98,7 @@ namespace Bjorn
             .signalSemaphoreCount = 1,
             .pSignalSemaphores = &*m_renderFinishedSemaphores[m_currentFrame]
         };
-        m_graphicsQueue.submit(submitInfo, *m_inFlightFences[m_currentFrame]);
+        m_device->GetGraphicsQueue().submit(submitInfo, *m_inFlightFences[m_currentFrame]);
 
         // Present to the screen
         const vk::PresentInfoKHR presentInfoKHR{
@@ -116,7 +108,7 @@ namespace Bjorn
             .pSwapchains = &m_swapchain->GetHandle(),
             .pImageIndices = &imageIndex
         };
-        result = m_presentQueue.presentKHR(presentInfoKHR);
+        result = m_device->GetPresentQueue().presentKHR(presentInfoKHR);
 
         // Check again if presentation fails because the surface is now incompatible
         if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_app.isFramebufferResized.load()) {
@@ -132,12 +124,12 @@ namespace Bjorn
 
     void Renderer::WaitIdle()
     {
-        m_device.waitIdle();
+        m_device->GetDevice().waitIdle();
     }
 
     void Renderer::LoadMesh(Mesh& mesh)
     {
-        mesh.Load(m_allocator, *this);
+        mesh.Load(m_device->GetAllocator(), *this);
     }
 
     void Renderer::UpdateUniformBuffer()
@@ -260,181 +252,14 @@ namespace Bjorn
         m_surface = vk::raii::SurfaceKHR(m_instance, _surface);
     }
 
-    void Renderer::SelectPhysicalDevice() 
+    void Renderer::CreateDevice()
     {
-        auto devices = m_instance.enumeratePhysicalDevices();
-        if (devices.empty())
-            throw std::runtime_error("Failed to find GPUs with Vulkan support!");
-
-        // List available devices
-        #ifdef _DEBUG
-            std::cout << "Available devices:" << std::endl;
-        #endif
-        for (const auto& device : devices) 
-        {
-            // Print stuff if needed
-            // TODO: reorganize this block of code because it's terrible :/
-            #ifdef _DEBUG
-            // If it is useful to query for raytracing property keep using VkPhysicalDeviceProperties2
-            // else revert to VkPhysicalDeviceProperties
-            auto deviceProperties = device.getProperties2();
-
-            // Other queriable stuff if ever needed
-            //auto deviceFeatures = device.getFeatures2();
-            //auto extensions = device.enumerateDeviceExtensionProperties();
-            //auto queueFamilyProperties = device.getQueueFamilyProperties();
-
-            // Device properties
-            std::cout << '\t' << "- " << deviceProperties.properties.deviceName << std::endl;
-            //std::cout << '\t' << "API version: " << deviceProperties.properties.apiVersion << std::endl;
-            //std::cout << '\t' << "Driver version: " << deviceProperties.properties.driverVersion << std::endl;
-            //std::cout << '\t' << "Vendor ID: " << deviceProperties.properties.vendorID << std::endl;
-            //std::cout << '\t' << "ID: " << deviceProperties.properties.deviceID << std::endl;
-            /*
-            switch (deviceProperties.properties.deviceType) {
-                case vk::PhysicalDeviceType::eOther: {
-                    std::cout << '\t' << "Type: " << "Other" << std::endl;
-                    break;
-                }
-                case vk::PhysicalDeviceType::eIntegratedGpu: {
-                    std::cout << '\t' << "Type: " << "Integrated GPU" << std::endl;
-                    break;
-                }
-                case vk::PhysicalDeviceType::eDiscreteGpu: {
-                    std::cout << '\t' << "Type: " << "Discrete GPU" << std::endl;
-                    break;
-                }
-                case vk::PhysicalDeviceType::eVirtualGpu: {
-                    std::cout << '\t' << "Type: " << "Virtual GPU" << std::endl;
-                    break;
-                }
-                case vk::PhysicalDeviceType::eCpu: {
-                    std::cout << '\t' << "Type: " << "CPU" << std::endl;
-                    break;
-                }
-            }
-            */
-            /*
-                std::cout << '\t' << "Supported extensions:" << std::endl;
-                for (const auto& extension : extensions) {
-                    std::cout << "\t\t - " << extension.extensionName << std::endl;
-                }
-            */
-
-            // Print physical device limits
-            std::cout <<
-                "maxBoundDescriptorSets: " <<
-                deviceProperties.properties.limits.maxBoundDescriptorSets <<
-                std::endl <<
-                "maxUniformBufferRange: " <<
-                deviceProperties.properties.limits.maxUniformBufferRange <<
-                std::endl <<
-                "maxStorageBufferRange: " <<
-                deviceProperties.properties.limits.maxStorageBufferRange <<
-                std::endl;
-            #endif
-
-            // Check for suitability
-            // TODO: add a proper check
-            bool isSuitable = device.getProperties().apiVersion >= VK_API_VERSION_1_4;
-            if (isSuitable) {
-                m_physicalDevice = device;
-                break;
-            }
-        }
-    }
-
-    void Renderer::CreateLogicalDevice() 
-    {
-        // Get index of the first queue family with graphics support
-        auto queueFamilyProperties = m_physicalDevice.getQueueFamilyProperties();
-        auto graphicsQueueFamilyProperty = std::find_if(queueFamilyProperties.begin(), queueFamilyProperties.end(),
-            [](vk::QueueFamilyProperties const& qfp) {
-                return qfp.queueFlags & vk::QueueFlagBits::eGraphics;
-            });
-        auto graphicsQueueFamilyIndex = static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
-
-        // Check queue family for presentation support
-        auto presentQueueFamilyIndex = m_physicalDevice.getSurfaceSupportKHR(graphicsQueueFamilyIndex, *m_surface) ? graphicsQueueFamilyIndex : -1;
-        // TODO: I should handle when this happens
-        if (presentQueueFamilyIndex == -1) {
-            std::runtime_error("Present and graphics are not supported by the same queue family!");
-        }
-
-        // DeviceQueueCreateInfo
-        float queuePriority = 0.0;
-        vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
-            .queueFamilyIndex = graphicsQueueFamilyIndex,
-            .queueCount = 1,
-            .pQueuePriorities = &queuePriority
-        };
-
-        // Create a chain of feature structures to enable multiple new features (on top of those of Vulkan 1.0) all at once
-        vk::StructureChain<
-            vk::PhysicalDeviceFeatures2,
-            vk::PhysicalDeviceVulkan13Features,
-            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> // To be able to change dinamically some pipeline properties
-            featureChain = {
-                {},
-                {.synchronization2 = true, .dynamicRendering = true},
-                {.extendedDynamicState = true}
-        };
-
-        // Required device extensions
-        // TODO: actually check for support and don't rely on the validation layer
-        std::vector<const char*> deviceExtensions = {
-            // Mandatory extension for presenting framebuffer on a window
-            vk::KHRSwapchainExtensionName,
-
-            // Vulkan tutorial extensions (I guess I'll understand what they are here for, at some point)
-            vk::KHRSpirv14ExtensionName,
-            vk::KHRSynchronization2ExtensionName,
-            vk::KHRCreateRenderpass2ExtensionName,
-            vk::KHRShaderDrawParametersExtensionName, // Required to be able to use SV_VertexID in shader code
-
-            // Raytracing extensions
-            vk::KHRAccelerationStructureExtensionName,
-            vk::KHRDeferredHostOperationsExtensionName, // Required by the extension above
-            vk::KHRRayTracingPipelineExtensionName,
-            vk::KHRRayQueryExtensionName
-        };
-
-        // Device creation
-        vk::DeviceCreateInfo deviceCreateInfo{
-            .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
-            .queueCreateInfoCount = 1,
-            .pQueueCreateInfos = &deviceQueueCreateInfo,
-            .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
-            .ppEnabledExtensionNames = deviceExtensions.data(),
-        };
-
-        try {
-            m_device = vk::raii::Device(m_physicalDevice, deviceCreateInfo);
-        }
-        catch (const vk::SystemError& err) {
-            std::cerr << "Vulkan error: " << err.what() << std::endl;
-        }
-
-        // Get graphics and presentation queue reference
-        m_graphicsQueue = vk::raii::Queue(m_device, graphicsQueueFamilyIndex, 0);
-        m_presentQueue = vk::raii::Queue(m_device, presentQueueFamilyIndex, 0);
-        m_graphicsQueueFamilyIndex = graphicsQueueFamilyIndex;
-    }
-
-    void Renderer::CreateMemoryAllocator()
-    {
-        VmaAllocatorCreateInfo allocatorCreateInfo{
-            .physicalDevice = *m_physicalDevice,
-            .device = *m_device,
-            .instance = *m_instance,
-            .vulkanApiVersion = vk::ApiVersion14
-        };
-        vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
+        m_device = std::make_unique<Device>(m_instance, m_surface);
     }
 
     void Renderer::CreateSwapchain()
     {
-        m_swapchain = std::make_unique<Swapchain>(m_physicalDevice, m_device, m_window, m_surface);
+        m_swapchain = std::make_unique<Swapchain>(m_device->GetPhysicalDevice(), m_device->GetDevice(), m_window, m_surface);
     }
 
     void Renderer::CreateDescriptorSetLayout()
@@ -461,7 +286,7 @@ namespace Bjorn
             .bindingCount = static_cast<uint32_t>(bindings.size()),
             .pBindings = bindings.data()
         };
-        m_descriptorSetLayout = vk::raii::DescriptorSetLayout(m_device, layoutInfo);
+        m_descriptorSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), layoutInfo);
     }
 
     void Renderer::CreatePushConstant()
@@ -579,7 +404,7 @@ namespace Bjorn
             .pushConstantRangeCount = 1,
             .pPushConstantRanges = &m_pushConstantRange
         };
-        m_pipelineLayout = vk::raii::PipelineLayout(m_device, pipelineLayoutInfo);
+        m_pipelineLayout = vk::raii::PipelineLayout(m_device->GetDevice(), pipelineLayoutInfo);
 
         // PipelineRenderingCreateInfo
         // It specifies the formats of the attachment used with dynamic rendering
@@ -605,7 +430,7 @@ namespace Bjorn
         };
 
         // FINALLY!
-        m_graphicsPipeline = vk::raii::Pipeline(m_device, nullptr, pipelineInfo);
+        m_graphicsPipeline = vk::raii::Pipeline(m_device->GetDevice(), nullptr, pipelineInfo);
     }
 
     vk::raii::ShaderModule Renderer::CreateShaderModule(const std::vector<char>& code) const
@@ -614,7 +439,7 @@ namespace Bjorn
             .codeSize = code.size() * sizeof(char),
             .pCode = reinterpret_cast<const uint32_t*>(code.data())
         };
-        vk::raii::ShaderModule shaderModule(m_device, createInfo);
+        vk::raii::ShaderModule shaderModule(m_device->GetDevice(), createInfo);
         return shaderModule;
     }
 
@@ -639,9 +464,9 @@ namespace Bjorn
         // CommandPoolCreateInfo
         vk::CommandPoolCreateInfo poolInfo = {
             .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-            .queueFamilyIndex = m_graphicsQueueFamilyIndex
+            .queueFamilyIndex = m_device->GetGraphicsQueueFamilyIndex()
         };
-        m_commandPool = vk::raii::CommandPool(m_device, poolInfo);
+        m_commandPool = vk::raii::CommandPool(m_device->GetDevice(), poolInfo);
     }
 
     void Renderer::CreateUniformBuffers()
@@ -654,7 +479,7 @@ namespace Bjorn
             uboInfo.usage = vk::BufferUsageFlagBits::eUniformBuffer;
             VmaAllocationCreateInfo uboAllocInfo{};
             uboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-            m_globalUBOs[i] = std::make_unique<Buffer>(uboInfo, uboAllocInfo, m_allocator, true);
+            m_globalUBOs[i] = std::make_unique<Buffer>(uboInfo, uboAllocInfo, m_device->GetAllocator(), true);
 
             // Object data storage buffer creation
             vk::BufferCreateInfo ssboInfo{};
@@ -662,7 +487,7 @@ namespace Bjorn
             ssboInfo.usage = vk::BufferUsageFlagBits::eStorageBuffer;
             VmaAllocationCreateInfo ssboAllocInfo{};
             ssboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-            m_objectSSBOs[i] = std::make_unique<Buffer>(ssboInfo, ssboAllocInfo, m_allocator, true);
+            m_objectSSBOs[i] = std::make_unique<Buffer>(ssboInfo, ssboAllocInfo, m_device->GetAllocator(), true);
         }
     }
 
@@ -679,7 +504,7 @@ namespace Bjorn
             .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
             .pPoolSizes = poolSizes.data()
         };
-        m_descriptorPool = vk::raii::DescriptorPool(m_device, poolInfo);
+        m_descriptorPool = vk::raii::DescriptorPool(m_device->GetDevice(), poolInfo);
     }
 
     void Renderer::CreateDescriptorSets()
@@ -691,7 +516,7 @@ namespace Bjorn
             .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
             .pSetLayouts = layouts.data()
         };
-        m_descriptorSets = m_device.allocateDescriptorSets(allocInfo);
+        m_descriptorSets = m_device->GetDevice().allocateDescriptorSets(allocInfo);
 
         // Bind the actual buffers to the descriptor sets
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -730,7 +555,7 @@ namespace Bjorn
                 .pBufferInfo = &objectSSBOInfo
             };
 
-            m_device.updateDescriptorSets(descriptorWrites, {});
+            m_device->GetDevice().updateDescriptorSets(descriptorWrites, {});
         }
     }
 
@@ -742,7 +567,7 @@ namespace Bjorn
             .level = vk::CommandBufferLevel::ePrimary,
             .commandBufferCount = MAX_FRAMES_IN_FLIGHT
         };
-        m_commandBuffers = vk::raii::CommandBuffers(m_device, allocInfo);
+        m_commandBuffers = vk::raii::CommandBuffers(m_device->GetDevice(), allocInfo);
     }
 
     void Renderer::CreateSyncObjects()
@@ -752,9 +577,9 @@ namespace Bjorn
         m_inFlightFences.clear();
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            m_imageAvailableSemaphores.emplace_back(m_device, vk::SemaphoreCreateInfo());
-            m_renderFinishedSemaphores.emplace_back(m_device, vk::SemaphoreCreateInfo());
-            m_inFlightFences.emplace_back(m_device, vk::FenceCreateInfo{ .flags = vk::FenceCreateFlagBits::eSignaled });
+            m_imageAvailableSemaphores.emplace_back(m_device->GetDevice(), vk::SemaphoreCreateInfo());
+            m_renderFinishedSemaphores.emplace_back(m_device->GetDevice(), vk::SemaphoreCreateInfo());
+            m_inFlightFences.emplace_back(m_device->GetDevice(), vk::FenceCreateInfo{ .flags = vk::FenceCreateFlagBits::eSignaled });
         }
     }
 
@@ -900,7 +725,7 @@ namespace Bjorn
             .level = vk::CommandBufferLevel::ePrimary, 
             .commandBufferCount = 1 
         };
-        vk::raii::CommandBuffer commandCopyBuffer = std::move(m_device.allocateCommandBuffers(allocInfo).front());
+        vk::raii::CommandBuffer commandCopyBuffer = std::move(m_device->GetDevice().allocateCommandBuffers(allocInfo).front());
 
         // Record commands
         commandCopyBuffer.begin(vk::CommandBufferBeginInfo{
@@ -910,13 +735,13 @@ namespace Bjorn
         commandCopyBuffer.end();
 
         // Submit to queue
-        m_graphicsQueue.submit(
+        m_device->GetGraphicsQueue().submit(
             vk::SubmitInfo{ 
             .commandBufferCount = 1, 
             .pCommandBuffers = &*commandCopyBuffer 
             }, 
             nullptr
         );
-        m_graphicsQueue.waitIdle();
+        m_device->GetGraphicsQueue().waitIdle();
     }
 }

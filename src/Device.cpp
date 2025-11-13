@@ -1,0 +1,166 @@
+#include "Device.hpp"
+
+#include <iostream>
+#include <set>
+
+namespace Bjorn
+{
+	Device::Device(vk::raii::Instance& instance, const vk::raii::SurfaceKHR& surface)
+	{
+        SelectPhysicalDevice(instance, surface);
+        CreateLogicalDevice(instance);
+        CreateMemoryAllocator(instance);
+	}
+
+    Device::~Device()
+    {
+        // VMA allocator cleanup
+        if (m_allocator)
+        {
+            vmaDestroyAllocator(m_allocator);
+            m_allocator = VK_NULL_HANDLE;
+        }
+    }
+
+    void Device::SelectPhysicalDevice(vk::raii::Instance& instance, const vk::raii::SurfaceKHR& surface)
+    {
+        for (const auto& physicalDevice : vk::raii::PhysicalDevices(instance))
+        {
+            auto deviceProperties = physicalDevice.getProperties();
+
+            // Check for Vulkan 1.4+ support
+            if (deviceProperties.apiVersion < VK_API_VERSION_1_4)
+                continue;
+
+            // Add other requirements check here if needed
+
+            // Print infos if needed
+            #ifdef _DEBUG
+                std::cout << '\t' << "- " << deviceProperties.deviceName << std::endl;
+
+                // Print physical device limits (TODO: remove if not needed anymore)
+                std::cout <<
+                    "maxBoundDescriptorSets: " <<
+                    deviceProperties.limits.maxBoundDescriptorSets <<
+                    std::endl <<
+                    "maxUniformBufferRange: " <<
+                    deviceProperties.limits.maxUniformBufferRange <<
+                    std::endl <<
+                    "maxStorageBufferRange: " <<
+                    deviceProperties.limits.maxStorageBufferRange <<
+                    std::endl;
+            #endif
+
+            // Get required queue family
+            auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+            int graphicsIndex = -1;
+            int presentIndex = -1;
+            for (size_t i = 0; i < queueFamilies.size(); i++)
+            {
+                auto& q = queueFamilies[i];
+                
+                // Graphics
+                if ((q.queueFlags & vk::QueueFlagBits::eGraphics) && graphicsIndex == -1)
+                    graphicsIndex = static_cast<int>(i);
+
+                // Presentation
+                if (physicalDevice.getSurfaceSupportKHR(static_cast<uint32_t>(i), *surface) && presentIndex == -1)
+                    presentIndex = static_cast<int>(i);
+            }
+
+            if (graphicsIndex != -1 && presentIndex != -1)
+            {
+                m_physicalDevice = physicalDevice;
+                m_graphicsQueueFamilyIndex = static_cast<uint32_t>(graphicsIndex);
+                m_presentQueueFamilyIndex = static_cast<uint32_t>(presentIndex);
+
+                return;
+            }
+        }
+
+        throw std::runtime_error("No suitable Vulkan physical device with required queue families found!");
+    }
+
+    void Device::CreateLogicalDevice(vk::raii::Instance& instance)
+    {
+        // Queue(s) create info
+        std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+        // If the two queues are from the same family, it avoids creating redundant create info structs
+        std::set<uint32_t> uniqueQueueFamilies = { m_graphicsQueueFamilyIndex, m_presentQueueFamilyIndex };
+        float queuePriority = 0.0f;
+
+        for (uint32_t queueFamilyIndex : uniqueQueueFamilies)
+        {
+            vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
+                .queueFamilyIndex = queueFamilyIndex,
+                .queueCount = 1,
+                .pQueuePriorities = &queuePriority
+            };
+            queueCreateInfos.push_back(deviceQueueCreateInfo);
+        }
+
+        // Create a chain of feature structures to enable multiple new FEATURES (on top of those of Vulkan 1.0) all at once
+        vk::StructureChain<
+            vk::PhysicalDeviceFeatures2,
+            vk::PhysicalDeviceVulkan13Features,
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> // To be able to change dinamically some pipeline properties
+            featureChain = {
+                {},
+                {.synchronization2 = true, .dynamicRendering = true},
+                {.extendedDynamicState = true}
+        };
+
+        // Required device EXTENSIONS
+        // TODO: actually check for support and don't rely on the validation layer
+        std::vector<const char*> deviceExtensions = {
+            // Mandatory extension for presenting framebuffer on a window
+            vk::KHRSwapchainExtensionName,
+
+            // Vulkan tutorial extensions (I guess I'll understand what they are here for, at some point)
+            vk::KHRSpirv14ExtensionName,
+            vk::KHRSynchronization2ExtensionName,
+            vk::KHRCreateRenderpass2ExtensionName,
+            vk::KHRShaderDrawParametersExtensionName, // Required to be able to use SV_VertexID in shader code
+
+            // Raytracing extensions (for the future)
+            //vk::KHRAccelerationStructureExtensionName,
+            //vk::KHRDeferredHostOperationsExtensionName, // Required by the extension above
+            //vk::KHRRayTracingPipelineExtensionName,
+            //vk::KHRRayQueryExtensionName
+        };
+
+        // Device creation
+        vk::DeviceCreateInfo deviceCreateInfo{
+            .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
+            .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
+            .pQueueCreateInfos = queueCreateInfos.data(),
+            .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
+            .ppEnabledExtensionNames = deviceExtensions.data(),
+        };
+
+        try
+        {
+            m_device = vk::raii::Device(m_physicalDevice, deviceCreateInfo);
+        }
+        catch (const vk::SystemError& err)
+        {
+            std::cerr << "Vulkan error: " << err.what() << std::endl;
+        }
+
+        // Get graphics and presentation queue references
+        m_graphicsQueue = vk::raii::Queue(m_device, m_graphicsQueueFamilyIndex, 0);
+        m_presentQueue = vk::raii::Queue(m_device, m_presentQueueFamilyIndex, 0);
+    }
+
+    void Device::CreateMemoryAllocator(vk::raii::Instance& instance)
+    {
+        VmaAllocatorCreateInfo allocatorCreateInfo
+        {
+            .physicalDevice = *m_physicalDevice,
+            .device = *m_device,
+            .instance = *instance,
+            .vulkanApiVersion = vk::ApiVersion14 // TODO: remove this hardcoded api version
+        };
+        vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
+    }
+}
