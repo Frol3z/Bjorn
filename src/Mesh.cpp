@@ -1,22 +1,7 @@
 #include "Mesh.hpp"
 
-//
-// The workflow for loading a Mesh should be:
-// - the Application will tell the Renderer to load a specific Mesh
-// - in addition, it will specify how to load the Mesh (from file, passing data from the Application level, etc...)
-// - the Renderer will take a reference to this Mesh and all the required data/info on how to load it
-// - then it will invoke the appropriate load method on the Mesh by passing references of any backend specific dependency
-//   e.g. VMAallocator, etc...
-// - the Mesh will load required data on CPU memory and request to transfer data to the GPU back to the Renderer
-// - the Renderer will then execute the request (via command buffer submitter to the GPU)
-// - once finished, the Renderer will tell the Mesh that it's free to deallocate the staging buffer which is not needed anymore
-// - once finished, the Renderer should notify the Application of the result
-// 
-// TODO - figure out where to store and how to send meshes to be drawn to the Renderer
-// - if the Mesh was loaded successfully then it will be stored **somewhere** where it will be requested at drawing time again
-//   by the Renderer
-// NOTE - consider implementing frustum and occlusion culling in the future
-//
+#include "Device.hpp"
+#include "Buffer.hpp"
 
 namespace Bjorn
 {
@@ -31,7 +16,6 @@ namespace Bjorn
             {{-0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}}
         };
 
-        // NOTE - Change index type in the binding if modified
         m_indices = {
             0, 1, 2, 2, 3, 0
         };
@@ -42,7 +26,7 @@ namespace Bjorn
         Unload();
     }
 
-	void Mesh::Load(const VmaAllocator& allocator, Renderer& renderer)
+	void Mesh::Load(Device& device)
 	{
         auto vertexDataSize = m_vertices.size() * sizeof(Vertex);
         if (!m_indices.empty())
@@ -52,15 +36,15 @@ namespace Bjorn
 
             // stagingSize should be equal to vertexDataSize most of the time
             auto stagingSize = std::max(vertexDataSize, indexDataSize);
-            CreateStagingBuffer(allocator, stagingSize);
-            CreateVertexBuffer(allocator, vertexDataSize, renderer);
-            CreateIndexBuffer(allocator, indexDataSize, renderer);
+            CreateStagingBuffer(device, stagingSize);
+            CreateVertexBuffer(device, vertexDataSize);
+            CreateIndexBuffer(device, indexDataSize);
         }
         else
         {
             // The mesh does not support indices -> vertices only representation
-            CreateStagingBuffer(allocator, vertexDataSize);
-            CreateVertexBuffer(allocator, vertexDataSize, renderer);
+            CreateStagingBuffer(device, vertexDataSize);
+            CreateVertexBuffer(device, vertexDataSize);
         }
 
         // Once this line is reached the data has been transferred
@@ -75,7 +59,7 @@ namespace Bjorn
         m_indexBuffer.reset();
     }
 
-    void Mesh::CreateStagingBuffer(const VmaAllocator& allocator, vk::DeviceSize size)
+    void Mesh::CreateStagingBuffer(Device& device, vk::DeviceSize size)
     {        
         VkBufferCreateInfo stagingInfo{};
         stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -86,7 +70,7 @@ namespace Bjorn
         VmaAllocationCreateInfo stagingAllocInfo{};
         stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 
-        m_stagingBuffer = std::make_unique<Buffer>(stagingInfo, stagingAllocInfo, allocator);
+        m_stagingBuffer = std::make_unique<Buffer>(device.GetAllocator(), stagingInfo, stagingAllocInfo);
     }
 
     void Mesh::DestroyStagingBuffer()
@@ -94,7 +78,7 @@ namespace Bjorn
         m_stagingBuffer.reset();
     }
 
-    void Mesh::CreateVertexBuffer(const VmaAllocator& allocator, vk::DeviceSize size, Renderer & renderer)
+    void Mesh::CreateVertexBuffer(Device& device, vk::DeviceSize size)
     {
         VkBufferCreateInfo vertexInfo{};
         vertexInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -105,16 +89,16 @@ namespace Bjorn
         VmaAllocationCreateInfo vertexAllocInfo{};
         vertexAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-        m_vertexBuffer = std::make_unique<Buffer>(vertexInfo, vertexAllocInfo, allocator);
+        m_vertexBuffer = std::make_unique<Buffer>(device.GetAllocator(), vertexInfo, vertexAllocInfo);
 
         // Load vertex data on the staging buffer
         m_stagingBuffer->LoadData(m_vertices.data(), size);
 
         // Issue request to copy vertex data loaded on the staging buffer to GPU memory
-        renderer.CopyBuffer(*m_stagingBuffer, *m_vertexBuffer, size);
+        device.CopyBuffer(*m_stagingBuffer, *m_vertexBuffer, size);
     }
 
-    void Mesh::CreateIndexBuffer(const VmaAllocator& allocator, vk::DeviceSize size, Renderer& renderer)
+    void Mesh::CreateIndexBuffer(Device& device, vk::DeviceSize size)
     {
         VkBufferCreateInfo indexInfo{};
         indexInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -125,12 +109,12 @@ namespace Bjorn
         VmaAllocationCreateInfo indexAllocInfo{};
         indexAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-        m_indexBuffer = std::make_unique<Buffer>(indexInfo, indexAllocInfo, allocator);
+        m_indexBuffer = std::make_unique<Buffer>(device.GetAllocator(), indexInfo, indexAllocInfo);
 
         // Load index data on the staging buffer
         m_stagingBuffer->LoadData(m_indices.data(), size);
 
         // Issue request to copy index data loaded on the staging buffer to GPU memory
-        renderer.CopyBuffer(*m_stagingBuffer, *m_indexBuffer, size);
+        device.CopyBuffer(*m_stagingBuffer, *m_indexBuffer, size);
     }
 }

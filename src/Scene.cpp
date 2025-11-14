@@ -23,9 +23,7 @@ namespace Bjorn
 	{
 		auto it = m_objects.find(name);
 		if (it == m_objects.end())
-		{
 			throw std::runtime_error("Object not found: " + name);
-		}
 		return *(it->second);
 	}
 

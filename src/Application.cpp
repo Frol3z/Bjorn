@@ -1,6 +1,9 @@
 #include "Application.hpp"
 
 #include "ResourceManager.hpp"
+#include "Window.hpp"
+#include "Scene.hpp"
+#include "Renderer.hpp"
 
 #include "GLFW/glfw3.h"
 
@@ -15,10 +18,12 @@ namespace Bjorn
 		m_scene = std::make_unique<Scene>(windowWidth, windowHeight);
 		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
 
-		BuildScene();
+		InitScene();
 	}
 
-	void Application::Run() 
+	Application::~Application() = default;
+
+	void Application::Run()
 	{
 		MainLoop();
 		CleanUp();
@@ -29,19 +34,19 @@ namespace Bjorn
 		glfwInit();
 	}
 
-	void Application::BuildScene()
+	void Application::InitScene()
 	{
+		// NOTE: COORDINATE SYSTEM
+		// X -> right
+		// Y -> forward
+		// Z -> up
+
 		// Set camera position
 		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -2.0f, 0.0f));
 		
 		// Load mesh
 		auto& rm = ResourceManager::GetInstance(*m_renderer);
 		rm.LoadMesh();
-
-		// NOTE: COORDINATE SYSTEM
-		// X -> right
-		// Y -> forward
-		// Z -> up
 
 		// Create an object
 		auto obj = std::make_unique<Object>("Quad", rm.GetMesh("QuadMesh"));
@@ -66,7 +71,9 @@ namespace Bjorn
 
 			m_renderer->DrawFrame();
 		}
-		m_renderer->WaitIdle(); // Wait for pending GPU operations to finish
+
+		// Wait for pending GPU operations to finish
+		m_renderer->WaitIdle();
 	}
 
 	void Application::CleanUp()

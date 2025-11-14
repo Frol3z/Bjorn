@@ -2,7 +2,7 @@
 
 namespace Bjorn
 {
-	Buffer::Buffer(const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, const VmaAllocator& allocator, bool isPersistent)
+	Buffer::Buffer(const VmaAllocator& allocator, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, bool isPersistent)
 		: m_allocator(allocator), m_isPersistent(isPersistent)
 	{
 		VkBuffer raw;
@@ -12,7 +12,8 @@ namespace Bjorn
 		if (m_isPersistent)
 		{
 			// If persistent mapping is enable, the buffer will hold a pointer to the mapped
-			// memory block for its entire lifespan without the overhead of remap it each time
+			// memory block for its entire lifespan without the overhead of remapping each time
+			// NOTE: use it with buffer which will be updated each frame
 			vmaMapMemory(m_allocator, m_allocation, &m_persistentMappedMemory);
 		}
 	}
@@ -22,9 +23,7 @@ namespace Bjorn
 		if (m_buffer && m_allocation)
 		{
 			if (m_isPersistent)
-			{
 				vmaUnmapMemory(m_allocator, m_allocation);
-			}
 
 			vmaDestroyBuffer(m_allocator, m_buffer, m_allocation);
 			m_buffer = nullptr;
@@ -35,7 +34,6 @@ namespace Bjorn
 	void Buffer::LoadData(const void* data, const size_t size)
 	{
 		// TODO: Assert if we should be able to load data onto this buffer
-
 		if (m_isPersistent)
 		{
 			memcpy(m_persistentMappedMemory, data, size);

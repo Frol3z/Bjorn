@@ -1,5 +1,7 @@
 #include "Device.hpp"
 
+#include "Buffer.hpp"
+
 #include <iostream>
 #include <set>
 
@@ -10,6 +12,7 @@ namespace Bjorn
         SelectPhysicalDevice(instance, surface);
         CreateLogicalDevice(instance);
         CreateMemoryAllocator(instance);
+        CreateImmediateCommandPool();
 	}
 
     Device::~Device()
@@ -20,6 +23,32 @@ namespace Bjorn
             vmaDestroyAllocator(m_allocator);
             m_allocator = VK_NULL_HANDLE;
         }
+    }
+
+    void Device::CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size)
+    {
+        // Short-lived command buffer allocation
+        vk::CommandBufferAllocateInfo allocInfo {
+            .commandPool = m_immediateCommandPool,
+            .level = vk::CommandBufferLevel::ePrimary,
+            .commandBufferCount = 1
+        };
+        vk::raii::CommandBuffer cmdBuffer = std::move(m_device.allocateCommandBuffers(allocInfo).front());
+
+        // Record commands
+        cmdBuffer.begin(vk::CommandBufferBeginInfo{ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+        cmdBuffer.copyBuffer(srcBuffer.GetHandle(), dstBuffer.GetHandle(), vk::BufferCopy(0, 0, size));
+        cmdBuffer.end();
+
+        // Submit to queue and wait for completion
+        m_graphicsQueue.submit(
+            vk::SubmitInfo {
+            .commandBufferCount = 1,
+            .pCommandBuffers = &*cmdBuffer
+            },
+            nullptr
+        );
+        m_graphicsQueue.waitIdle();
     }
 
     void Device::SelectPhysicalDevice(vk::raii::Instance& instance, const vk::raii::SurfaceKHR& surface)
@@ -162,5 +191,16 @@ namespace Bjorn
             .vulkanApiVersion = vk::ApiVersion14 // TODO: remove this hardcoded api version
         };
         vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
+    }
+
+    void Device::CreateImmediateCommandPool()
+    {
+        // Creating a dedicated command pool used to allocate
+        // short-lived command buffers from (used for memory transfer ops)
+        vk::CommandPoolCreateInfo poolInfo {
+            .flags = vk::CommandPoolCreateFlagBits::eTransient,
+            .queueFamilyIndex = m_graphicsQueueFamilyIndex
+        };
+        m_immediateCommandPool = vk::raii::CommandPool(m_device, poolInfo);
     }
 }

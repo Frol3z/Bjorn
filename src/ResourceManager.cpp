@@ -1,5 +1,7 @@
 #include "ResourceManager.hpp"
 
+#include "Renderer.hpp"
+
 namespace Bjorn
 {
 	void ResourceManager::LoadMesh()

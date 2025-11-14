@@ -1,7 +1,12 @@
-#include "Application.hpp"
 #include "Renderer.hpp"
 
+#include "Application.hpp"
 #include "Mesh.hpp"
+#include "Scene.hpp"
+#include "Window.hpp"
+#include "Device.hpp"
+#include "Swapchain.hpp"
+#include "Buffer.hpp"
 
 #include <GLFW/glfw3.h>
 
@@ -36,10 +41,10 @@ namespace Bjorn
         CreatePushConstant();
         CreateGraphicsPipeline();
         CreateCommandPool();
+        CreateCommandBuffer();
         CreateUniformBuffers();
         CreateDescriptorPool();
         CreateDescriptorSets();
-        CreateCommandBuffer();
         CreateSyncObjects();
     }
 
@@ -81,7 +86,7 @@ namespace Bjorn
             throw std::runtime_error("Failed to acquire swapchain image!");
         }
 
-        UpdateUniformBuffer();
+        UpdateFrameData();
 
         // Record command buffer and reset draw fence
         m_device->GetDevice().resetFences(*m_inFlightFences[m_currentFrame]);
@@ -129,17 +134,11 @@ namespace Bjorn
 
     void Renderer::LoadMesh(Mesh& mesh)
     {
-        mesh.Load(m_device->GetAllocator(), *this);
+        mesh.Load(*m_device);
     }
 
-    void Renderer::UpdateUniformBuffer()
-    {
-        //static auto startTime = std::chrono::high_resolution_clock::now();
-        //auto currentTime = std::chrono::high_resolution_clock::now();
-        //float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-        // NOTE: assuming coord. system as X -> right, Y -> forward, Z -> up
-        
+    void Renderer::UpdateFrameData()
+    {   
         // Update the global uniform buffer
         GlobalUBO globalUBO{};
         globalUBO.view = m_scene.GetCamera().GetViewMatrix();
@@ -162,7 +161,6 @@ namespace Bjorn
     {
         m_app.isFramebufferResized.store(false);
         m_swapchain->RecreateSwapchain();
-        // Update the camera right and bottom members and recompute the matrices
     }
 
 	void Renderer::CreateInstance() 
@@ -259,18 +257,15 @@ namespace Bjorn
 
     void Renderer::CreateSwapchain()
     {
-        m_swapchain = std::make_unique<Swapchain>(m_device->GetPhysicalDevice(), m_device->GetDevice(), m_window, m_surface);
+        m_swapchain = std::make_unique<Swapchain>(*m_device, m_window, m_surface);
     }
 
     void Renderer::CreateDescriptorSetLayout()
     {
-        // TODO:
-        // - add a new binding for the per object data buffer
-        
         std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
         
         // Binding 0 -> global UBO
-        bindings[0] = vk::DescriptorSetLayoutBinding{
+        bindings[0] = vk::DescriptorSetLayoutBinding {
             0, vk::DescriptorType::eUniformBuffer, 1,
             vk::ShaderStageFlagBits::eVertex, nullptr
         };
@@ -316,7 +311,6 @@ namespace Bjorn
         vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
         // VertexInput
-        // TODO: add index buffers support
         auto bindingDescription = Vertex::GetBindingDescription();
         auto attributeDescriptions = Vertex::GetAttributeDescriptions();
         vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
@@ -327,41 +321,19 @@ namespace Bjorn
         };
 
         // InputAssembly
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
-            .topology = vk::PrimitiveTopology::eTriangleList
-        };
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly { .topology = vk::PrimitiveTopology::eTriangleList };
 
-        /*
-        // Pipeline-baked viewport and scissors
-        vk::Viewport{
-            0.0f,
-            0.0f,
-            static_cast<float>(m_SwapChainExtent.width),
-            static_cast<float>(m_SwapChainExtent.height),
-            0.0f,
-            1.0f
-        };
-
-        vk::Rect2D{
-            vk::Offset2D{ 0, 0 },
-            m_SwapChainExtent
-        };
-        */
-
-        // Dynamic viewport and scissors (will be set in the command buffer)
-        std::vector dynamicStates = {
-            vk::DynamicState::eViewport,
-            vk::DynamicState::eScissor
-        };
+        // Dynamic viewport and scissors placeholders (will be set through the command buffer)
+        std::vector dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
         vk::PipelineDynamicStateCreateInfo dynamicState{
             .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
             .pDynamicStates = dynamicStates.data()
         };
         // We just need to specify how many there are at pipeline creation time
-        vk::PipelineViewportStateCreateInfo viewportState{ .viewportCount = 1, .scissorCount = 1 };
+        vk::PipelineViewportStateCreateInfo viewportState { .viewportCount = 1, .scissorCount = 1 };
 
         // Rasterizer
-        vk::PipelineRasterizationStateCreateInfo rasterizer{
+        vk::PipelineRasterizationStateCreateInfo rasterizer {
             .depthClampEnable = vk::False, // Clamp out of bound depth values to the near or far plane
             .rasterizerDiscardEnable = vk::False, // Disable rasterization (no output)
             .polygonMode = vk::PolygonMode::eFill, // For wireframe mode a GPU feature must be enabled
@@ -397,7 +369,7 @@ namespace Bjorn
             .pAttachments = &colorBlendAttachment
         };
 
-        // Uniforms
+        // Pipeline layout (descriptors layout and push constants)
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
             .setLayoutCount = 1,
             .pSetLayouts = &*m_descriptorSetLayout,
@@ -469,6 +441,17 @@ namespace Bjorn
         m_commandPool = vk::raii::CommandPool(m_device->GetDevice(), poolInfo);
     }
 
+    void Renderer::CreateCommandBuffer()
+    {
+        // CommandBufferAllocateInfo
+        vk::CommandBufferAllocateInfo allocInfo{
+            .commandPool = m_commandPool,
+            .level = vk::CommandBufferLevel::ePrimary,
+            .commandBufferCount = MAX_FRAMES_IN_FLIGHT
+        };
+        m_commandBuffers = vk::raii::CommandBuffers(m_device->GetDevice(), allocInfo);
+    }
+
     void Renderer::CreateUniformBuffers()
     {
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -479,7 +462,7 @@ namespace Bjorn
             uboInfo.usage = vk::BufferUsageFlagBits::eUniformBuffer;
             VmaAllocationCreateInfo uboAllocInfo{};
             uboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-            m_globalUBOs[i] = std::make_unique<Buffer>(uboInfo, uboAllocInfo, m_device->GetAllocator(), true);
+            m_globalUBOs[i] = std::make_unique<Buffer>(m_device->GetAllocator(), uboInfo, uboAllocInfo, true);
 
             // Object data storage buffer creation
             vk::BufferCreateInfo ssboInfo{};
@@ -487,13 +470,13 @@ namespace Bjorn
             ssboInfo.usage = vk::BufferUsageFlagBits::eStorageBuffer;
             VmaAllocationCreateInfo ssboAllocInfo{};
             ssboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-            m_objectSSBOs[i] = std::make_unique<Buffer>(ssboInfo, ssboAllocInfo, m_device->GetAllocator(), true);
+            m_objectSSBOs[i] = std::make_unique<Buffer>(m_device->GetAllocator(), ssboInfo, ssboAllocInfo, true);
         }
     }
 
     void Renderer::CreateDescriptorPool()
     {
-        std::array<vk::DescriptorPoolSize, 2> poolSizes{
+        std::array<vk::DescriptorPoolSize, 2> poolSizes {
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eStorageBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT }
         };
@@ -557,17 +540,6 @@ namespace Bjorn
 
             m_device->GetDevice().updateDescriptorSets(descriptorWrites, {});
         }
-    }
-
-    void Renderer::CreateCommandBuffer()
-    {
-        // CommandBufferAllocateInfo
-        vk::CommandBufferAllocateInfo allocInfo{
-            .commandPool = m_commandPool,
-            .level = vk::CommandBufferLevel::ePrimary,
-            .commandBufferCount = MAX_FRAMES_IN_FLIGHT
-        };
-        m_commandBuffers = vk::raii::CommandBuffers(m_device->GetDevice(), allocInfo);
     }
 
     void Renderer::CreateSyncObjects()
@@ -639,11 +611,8 @@ namespace Bjorn
         for (uint32_t i = 0; i < objects.size(); i++)
         {
             const Object* obj = objects[i];
-            
-            // Push object index
-            //const PushConstants pc{ i };
-            //std::array<PushConstants, 1> pcArray{ pc };
 
+            // Update object index
             PushConstants pc{ i };
             m_commandBuffers[m_currentFrame].pushConstants(
                 *m_pipelineLayout,
@@ -655,7 +624,7 @@ namespace Bjorn
             // Bind vertex and index buffer
             auto& mesh = obj->GetMesh();
             m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
-            m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, vk::IndexType::eUint16);
+            m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
 
             // Draw call
             m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
@@ -713,35 +682,5 @@ namespace Bjorn
             .pImageMemoryBarriers = &barrier
         };
         m_commandBuffers[m_currentFrame].pipelineBarrier2(dependencyInfo);
-    }
-
-    void Renderer::CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size)
-    {
-        // TODO: May be better to create a temporary command pool for memory allocation optimization
-
-        // Command buffer allocation
-        vk::CommandBufferAllocateInfo allocInfo{ 
-            .commandPool = m_commandPool, 
-            .level = vk::CommandBufferLevel::ePrimary, 
-            .commandBufferCount = 1 
-        };
-        vk::raii::CommandBuffer commandCopyBuffer = std::move(m_device->GetDevice().allocateCommandBuffers(allocInfo).front());
-
-        // Record commands
-        commandCopyBuffer.begin(vk::CommandBufferBeginInfo{
-            .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
-        });
-        commandCopyBuffer.copyBuffer(srcBuffer.GetHandle(), dstBuffer.GetHandle(), vk::BufferCopy(0, 0, size));
-        commandCopyBuffer.end();
-
-        // Submit to queue
-        m_device->GetGraphicsQueue().submit(
-            vk::SubmitInfo{ 
-            .commandBufferCount = 1, 
-            .pCommandBuffers = &*commandCopyBuffer 
-            }, 
-            nullptr
-        );
-        m_device->GetGraphicsQueue().waitIdle();
     }
 }

@@ -5,22 +5,22 @@
 
 #include <glm/glm.hpp>
 
-#include "Device.hpp"
-#include "Swapchain.hpp"
-#include "Buffer.hpp"
-
 namespace Bjorn
 {
-	// Note that for greater number of concurrent frames
+	// NOTE: 
+	// for a greater number of concurrent frames
 	// the CPU might get ahead of the GPU causing latency
 	// between frames
 	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
-	// TODO: comment
+	// Max number of drawable objects
 	constexpr uint32_t MAX_OBJECTS = 100;
 
 	// Fwd declaration
 	class Application;
+	class Device;
+	class Swapchain;
+	class Buffer;
 	class Window;
 	class Scene;
 	class Mesh;
@@ -51,10 +51,9 @@ namespace Bjorn
 			void DrawFrame();
 			void WaitIdle();
 			void LoadMesh(Mesh& mesh);
-			void CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size);
 
 		private:
-			void UpdateUniformBuffer();
+			void UpdateFrameData();
 			void UpdateOnFramebufferResized();
 
 			void CreateInstance();
@@ -65,12 +64,13 @@ namespace Bjorn
 			void CreatePushConstant();
 			void CreateGraphicsPipeline();
 			void CreateCommandPool();
+			void CreateCommandBuffer();
 			void CreateUniformBuffers();
 			void CreateDescriptorPool();
 			void CreateDescriptorSets();
-			void CreateCommandBuffer();
 			void CreateSyncObjects();
 
+			// TODO: will be moved to the Material system
 			[[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const;
 			static std::vector<char> ReadFile(const std::string& filename);
 
@@ -95,18 +95,9 @@ namespace Bjorn
 			vk::raii::Instance m_instance = nullptr;
 			vk::raii::SurfaceKHR m_surface = nullptr;
 			std::unique_ptr<Device> m_device = nullptr;
-
-
-
 			std::unique_ptr<Swapchain> m_swapchain = nullptr;
 
 			vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
-			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_globalUBOs;
-			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;
-
-			vk::raii::DescriptorPool m_descriptorPool = nullptr;
-			std::vector<vk::raii::DescriptorSet> m_descriptorSets;
-
 			vk::PushConstantRange m_pushConstantRange;
 
 			vk::raii::PipelineLayout m_pipelineLayout = nullptr;
@@ -114,6 +105,12 @@ namespace Bjorn
 
 			vk::raii::CommandPool m_commandPool = nullptr;
 			std::vector<vk::raii::CommandBuffer> m_commandBuffers;
+
+			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_globalUBOs;
+			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;
+
+			vk::raii::DescriptorPool m_descriptorPool = nullptr;
+			std::vector<vk::raii::DescriptorSet> m_descriptorSets;
 
 			std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
 			std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;

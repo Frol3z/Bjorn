@@ -6,14 +6,14 @@ Bjorn is a Vulkan renderer I'm currently working on. This README will be updated
 
 # Roadmap
 ## Short term
-- model loading
-- texture support
+- ImGUI integration
+- material system
 - basic lighting
 ## Long term
-- basic UI
-- physically based lighting support
-- post processing support
-- fully raytraced pipeline
+- PBR materials
+- shadow maps
+- deferred shading
+- hybrid GI
 
 # Getting Started
 ## Prerequisites

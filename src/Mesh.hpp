@@ -1,13 +1,14 @@
 #pragma once
 
+#include <vulkan/vulkan_raii.hpp>
 #include <glm/glm.hpp>
 #include <vector>
 
-#include "Renderer.hpp"
-#include "Buffer.hpp"
-
 namespace Bjorn 
 {
+	class Buffer;
+	class Device;
+
 	struct Vertex
 	{
 		glm::vec3 pos;
@@ -34,7 +35,7 @@ namespace Bjorn
 			Mesh();
 			~Mesh();
 
-			void Load(const VmaAllocator& allocator, Renderer& renderer);
+			void Load(Device& device);
 			void Unload();
 			
 			const Buffer& GetVertexBuffer() const { 
@@ -46,15 +47,14 @@ namespace Bjorn
 				return *m_indexBuffer;
 			};
 
-			size_t GetIndexBufferSize() const {
-				return m_indices.size();
-			};
+			size_t GetIndexBufferSize() const { return m_indices.size(); };
+			vk::IndexType GetIndexType() const { return vk::IndexType::eUint16; };
 
 		private:
-			void CreateStagingBuffer(const VmaAllocator& allocator, vk::DeviceSize size);
+			void CreateStagingBuffer(Device& device, vk::DeviceSize size);
 			void DestroyStagingBuffer();
-			void CreateVertexBuffer(const VmaAllocator& allocator, vk::DeviceSize size,Renderer& renderer);
-			void CreateIndexBuffer(const VmaAllocator& allocator, vk::DeviceSize size,Renderer& renderer);
+			void CreateVertexBuffer(Device& device, vk::DeviceSize size);
+			void CreateIndexBuffer(Device& device, vk::DeviceSize size);
 
 			std::vector<Vertex> m_vertices;
 			std::vector<uint16_t> m_indices;

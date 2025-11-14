@@ -1,3 +1,5 @@
+#include "Window.hpp"
+
 #include "Application.hpp"
 
 #include <GLFW/glfw3.h>
