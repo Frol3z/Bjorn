@@ -294,7 +294,7 @@ namespace Bjorn
     void Renderer::CreateGraphicsPipeline()
     {
         // Create shader module
-        auto shaderPath = std::filesystem::current_path() / "../shaders/_shader.spv";
+        auto shaderPath = std::filesystem::current_path() / "./shaders/shader.spv";
         vk::raii::ShaderModule shaderModule = CreateShaderModule(ReadFile(shaderPath.string()));
 
         // ShaderStageCreateInfo
