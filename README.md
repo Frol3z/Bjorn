@@ -44,6 +44,9 @@ cmake ..
 5. Set `Bjorn` as the **startup project** in Visual Studio.
 6. Build and run the project.
 
+# Class diagram
+![Bjorn](https://github.com/user-attachments/assets/2db46a15-cc66-4667-97b0-2f1dc718a246)
+
 # Examples
 
 # References
