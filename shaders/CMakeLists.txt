@@ -10,8 +10,26 @@ if(NOT SLANGC_EXECUTABLE)
     message(FATAL_ERROR "slangc not found! Set VULKAN_SDK environment variable.")
 endif()
 
+# Find GLSL compiler
+find_program(GLSLANG_VALIDATOR glslangValidator HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
+if(NOT GLSLANG_VALIDATOR)
+    message(FATAL_ERROR "glslangValidator not found! Set VULKAN_SDK environment variable.")
+endif()
+
 # Compile each shader individually
-set(COMPILED_SHADERS)
+
+# Dear ImGui custom vertex shader (color fix)
+set(IMGUI_VERT_SPV ${OUTPUT_DIR}/imgui_custom.spv)
+add_custom_command(
+    OUTPUT ${OUTPUT_DIR}/imgui_custom.spv
+    COMMAND ${GLSLANG_VALIDATOR} -V ${CMAKE_CURRENT_SOURCE_DIR}/imgui_custom.vert
+            -o ${IMGUI_VERT_SPV}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imgui_custom.vert
+    COMMENT "Compiling Dear ImGui custom vertex shader"
+)
+
+# My shaders
+set(COMPILED_SHADERS ${IMGUI_VERT_SPV})
 foreach(SRC ${SHADER_SOURCES})
     get_filename_component(SRC_NAME ${SRC} NAME_WE)
     set(OUT_FILE ${OUTPUT_DIR}/${SRC_NAME}.spv)

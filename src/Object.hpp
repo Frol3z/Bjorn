@@ -5,7 +5,7 @@
 
 #include <string>
 
-namespace Bjorn
+namespace Felina
 {
 	class Object
 	{

@@ -2,7 +2,7 @@
 
 #include <vulkan/vulkan_raii.hpp>
 
-namespace Bjorn
+namespace Felina
 {
 	// Fwd declarations
 	class Window;

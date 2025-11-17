@@ -1,6 +1,6 @@
 #include "Scene.hpp"
 
-namespace Bjorn
+namespace Felina
 {
 	Scene::Scene(float viewportWidth, float viewportHeight)
 		: m_camera(viewportWidth, viewportHeight)

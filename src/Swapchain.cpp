@@ -5,7 +5,7 @@
 
 #include "GLFW/glfw3.h"
 
-namespace Bjorn 
+namespace Felina 
 {
 	Swapchain::Swapchain(const Device& device, const Window& window, const vk::raii::SurfaceKHR& surface)
         : m_device(device), m_surface(surface), m_window(window)
@@ -135,8 +135,9 @@ namespace Bjorn
 
     vk::PresentModeKHR Swapchain::ChooseSwapchainPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
     {
+        // NOTE: it should be using mailbox but I want vsync rn
         for (const auto& availablePresentMode : availablePresentModes) {
-            if (availablePresentMode == vk::PresentModeKHR::eMailbox)
+            if (availablePresentMode == vk::PresentModeKHR::eFifo)
                 return availablePresentMode;
         }
         // The only mode guaranteed to be available (may result in visible tearing)

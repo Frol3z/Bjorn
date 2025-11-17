@@ -23,3 +23,11 @@ FetchContent_Declare(
     GIT_TAG 1d8f600fd424278486eade7ed3e877c99f0846b1 # v3.3.0
 )
 add_subdirectory(vma)
+
+# imgui
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG 9a5d5c45f54b1301ea471622eddede70384243af # v1.92.4
+)
+add_subdirectory(imgui)

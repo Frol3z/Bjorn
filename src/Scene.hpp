@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-namespace Bjorn 
+namespace Felina 
 {
 	class Scene
 	{

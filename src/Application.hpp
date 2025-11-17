@@ -4,7 +4,7 @@
 #include <string>
 #include <atomic>
 
-namespace Bjorn 
+namespace Felina 
 {
 	class Window;
 	class Scene;
@@ -22,7 +22,8 @@ namespace Bjorn
 			const std::string& GetName() const { return m_name; }
 
 		private:
-			void Init();
+			void InitGlfw();
+			void InitImGui();
 			void InitScene();
 			void MainLoop();
 			void CleanUp();

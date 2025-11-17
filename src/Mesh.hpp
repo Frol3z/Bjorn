@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <vector>
 
-namespace Bjorn 
+namespace Felina 
 {
 	class Buffer;
 	class Device;

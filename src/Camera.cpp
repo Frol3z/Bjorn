@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-namespace Bjorn
+namespace Felina
 {
 	Camera::Camera(float width, float height, float nearPlane, float farPlane)
 		: m_right(width), m_bottom(height), m_near(nearPlane), m_far(farPlane),

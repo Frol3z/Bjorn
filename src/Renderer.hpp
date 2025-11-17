@@ -5,7 +5,10 @@
 
 #include <glm/glm.hpp>
 
-namespace Bjorn
+struct ImGui_ImplVulkan_InitInfo;
+struct ImDrawData;
+
+namespace Felina
 {
 	// NOTE: 
 	// for a greater number of concurrent frames
@@ -52,6 +55,10 @@ namespace Bjorn
 			void WaitIdle();
 			void LoadMesh(Mesh& mesh);
 
+			// Dear ImGui
+			ImGui_ImplVulkan_InitInfo GetImGuiInitInfo();
+			void DrawImGuiFrame(ImDrawData* drawData);
+
 		private:
 			void UpdateFrameData();
 			void UpdateOnFramebufferResized();
@@ -90,6 +97,10 @@ namespace Bjorn
 			const Scene& m_scene;
 
 			uint32_t m_currentFrame = 0;
+
+			// Dear ImGui custom vertex shader (temporary fix for colors issue)
+			std::vector<char> m_imGuiCustomVertShaderCode;
+			vk::ShaderModuleCreateInfo m_imGuiCustomVertShaderModuleCreateInfo;
 
 			vk::raii::Context m_context; // Used as a dynamic loader
 			vk::raii::Instance m_instance = nullptr;

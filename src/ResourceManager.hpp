@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <iostream>
 
-namespace Bjorn
+namespace Felina
 {
 	class Renderer;
 

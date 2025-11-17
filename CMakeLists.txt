@@ -1,7 +1,7 @@
 ﻿cmake_minimum_required(VERSION 4.0)
 
 project(
-    Bjorn
+    Felina
     LANGUAGES CXX
     VERSION 1.0
 )
@@ -37,6 +37,6 @@ add_subdirectory(src)
 
 # Then additional resources
 add_subdirectory(shaders)
-add_dependencies(Bjorn Shaders)
+add_dependencies(Felina Shaders)
 
 

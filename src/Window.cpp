@@ -4,7 +4,7 @@
 
 #include <GLFW/glfw3.h>
 
-namespace Bjorn 
+namespace Felina 
 {
 	Window::Window(uint32_t width, uint32_t height, const std::string& title, Application& app)
         : m_app(app)
@@ -19,7 +19,10 @@ namespace Bjorn
         glfwSetFramebufferSizeCallback(m_window, FramebufferResizeCallback);
 	}
 
-    Window::~Window() { glfwDestroyWindow(m_window); }
+    Window::~Window() 
+    {
+        glfwDestroyWindow(m_window); 
+    }
 
     int Window::ShouldClose() const { return glfwWindowShouldClose(m_window); }
 

@@ -4,7 +4,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace Bjorn
+namespace Felina
 {
 	class Camera
 	{

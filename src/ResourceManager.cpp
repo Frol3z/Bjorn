@@ -2,7 +2,7 @@
 
 #include "Renderer.hpp"
 
-namespace Bjorn
+namespace Felina
 {
 	void ResourceManager::LoadMesh()
 	{
@@ -11,7 +11,7 @@ namespace Bjorn
 		// Request the renderer to load mesh data on the GPU
 		m_renderer.LoadMesh(*mesh);
 		// Store (and move ownership) of the mesh into the map
-		m_meshes.emplace("QuadMesh", std::move(mesh));
+		m_meshes.emplace("CubeMesh", std::move(mesh));
 	}
 
 	void ResourceManager::UnloadAll()

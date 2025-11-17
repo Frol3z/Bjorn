@@ -7,7 +7,7 @@ int main()
 {
 	try 
 	{
-		Bjorn::Application app("My App", 800, 600);
+		Felina::Application app("My App", 800, 600);
 		app.Run();
 	}
 	catch (const std::exception& e) 

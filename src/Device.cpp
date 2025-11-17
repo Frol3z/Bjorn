@@ -5,7 +5,7 @@
 #include <iostream>
 #include <set>
 
-namespace Bjorn
+namespace Felina
 {
 	Device::Device(vk::raii::Instance& instance, const vk::raii::SurfaceKHR& surface)
 	{

@@ -1,6 +1,6 @@
 #include "Buffer.hpp"
 
-namespace Bjorn
+namespace Felina
 {
 	Buffer::Buffer(const VmaAllocator& allocator, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, bool isPersistent)
 		: m_allocator(allocator), m_isPersistent(isPersistent)

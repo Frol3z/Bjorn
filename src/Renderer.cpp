@@ -9,12 +9,14 @@
 #include "Buffer.hpp"
 
 #include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <backends/imgui_impl_vulkan.h>
 
 #include <iostream>
 #include <fstream>
 #include <filesystem>
 
-namespace Bjorn 
+namespace Felina 
 {
     // Validation layers
     #ifdef NDEBUG
@@ -135,6 +137,48 @@ namespace Bjorn
     void Renderer::LoadMesh(Mesh& mesh)
     {
         mesh.Load(*m_device);
+    }
+
+    ImGui_ImplVulkan_InitInfo Renderer::GetImGuiInitInfo()
+    {
+        vk::PipelineRenderingCreateInfoKHR pipelineRenderingCreateInfo{};
+        pipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        pipelineRenderingCreateInfo.pColorAttachmentFormats = &m_swapchain->GetSurfaceFormat().format;
+        pipelineRenderingCreateInfo.depthAttachmentFormat = vk::Format::eUndefined;
+        pipelineRenderingCreateInfo.stencilAttachmentFormat = vk::Format::eUndefined;
+
+        // Create shader module
+        auto shaderPath = std::filesystem::current_path() / "./shaders/imgui_custom.spv";
+        m_imGuiCustomVertShaderCode = ReadFile(shaderPath.string());
+        m_imGuiCustomVertShaderModuleCreateInfo = {
+            .codeSize = m_imGuiCustomVertShaderCode.size() * sizeof(char),
+            .pCode = reinterpret_cast<const uint32_t*>(m_imGuiCustomVertShaderCode.data())
+        };
+
+        ImGui_ImplVulkan_InitInfo vkInitInfo = {};
+        vkInitInfo.ApiVersion = vk::ApiVersion14;
+        vkInitInfo.Instance = *m_instance;
+        vkInitInfo.PhysicalDevice = *m_device->GetPhysicalDevice();
+        vkInitInfo.Device = *m_device->GetDevice();
+        vkInitInfo.QueueFamily = m_device->GetGraphicsQueueFamilyIndex();
+        vkInitInfo.Queue = *m_device->GetGraphicsQueue();
+        vkInitInfo.DescriptorPool = VK_NULL_HANDLE;
+        vkInitInfo.DescriptorPoolSize = 1000; // ImGui backend will allocate the descriptor pool
+        vkInitInfo.MinImageCount = MAX_FRAMES_IN_FLIGHT;
+        vkInitInfo.ImageCount = static_cast<uint32_t>(m_swapchain->GetImages().size());
+        vkInitInfo.PipelineInfoMain.RenderPass = VK_NULL_HANDLE;
+        vkInitInfo.PipelineInfoMain.Subpass = 0;
+        vkInitInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        vkInitInfo.PipelineInfoMain.PipelineRenderingCreateInfo = *&pipelineRenderingCreateInfo;
+        vkInitInfo.UseDynamicRendering = true;
+        vkInitInfo.CustomShaderVertCreateInfo = *&m_imGuiCustomVertShaderModuleCreateInfo;
+        vkInitInfo.CustomShaderFragCreateInfo = {};
+        return vkInitInfo;
+    }
+
+    void Renderer::DrawImGuiFrame(ImDrawData* drawData)
+    {
+        ImGui_ImplVulkan_RenderDrawData(drawData, *m_commandBuffers[m_currentFrame]);
     }
 
     void Renderer::UpdateFrameData()
@@ -629,6 +673,9 @@ namespace Bjorn
             // Draw call
             m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
         }
+
+        // Draw Dear ImGui
+        DrawImGuiFrame(ImGui::GetDrawData());
 
         // Finish up rendering
         m_commandBuffers[m_currentFrame].endRendering();

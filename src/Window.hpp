@@ -5,7 +5,7 @@
 // Fwd declaration
 struct GLFWwindow;
 
-namespace Bjorn 
+namespace Felina 
 {
 	// Fwd declaration
 	class Application;

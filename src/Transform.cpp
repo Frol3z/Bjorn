@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-namespace Bjorn
+namespace Felina
 {
 	Transform::Transform()
 		: m_position(0.0f), m_rotation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f)), m_scale(1.0f), m_transform(1.0f)
