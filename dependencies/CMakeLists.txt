@@ -28,6 +28,6 @@ add_subdirectory(vma)
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG 9a5d5c45f54b1301ea471622eddede70384243af # v1.92.4
+    GIT_TAG e7d2d636affeeac1fc7175fb13472ca02d1bc0d1 # v1.92.4-docking
 )
 add_subdirectory(imgui)

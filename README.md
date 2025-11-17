@@ -24,7 +24,7 @@ Bjorn is a Vulkan renderer I'm currently working on. This README will be updated
 - [GLFW 3.4](https://www.glfw.org/)
 - [GLM 1.0.1](https://github.com/g-truc/glm)
 - [Vulkan Memory Allocator 3.3.0](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
-- [Dear ImGui 1.92.4](https://github.com/ocornut/imgui)
+- [Dear ImGui 1.92.4 (docking)](https://github.com/ocornut/imgui)
 ## Build instructions
 ### Windows
 1. Clone this repository:

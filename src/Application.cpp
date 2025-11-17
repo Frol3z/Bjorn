@@ -41,10 +41,12 @@ namespace Felina
 	void Application::InitImGui()
 	{
 		ImGui::CreateContext();
-		ImGui::StyleColorsDark();
 
-		// Second parameter is for chaining input callbacks to ImGui automatically
-		ImGui_ImplGlfw_InitForVulkan(m_window->GetHandle(), true);
+		ImGui::StyleColorsDark();
+		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+		// Init backends
+		ImGui_ImplGlfw_InitForVulkan(m_window->GetHandle(), true); // Second parameter is for chaining input callbacks to ImGui automatically
 		ImGui_ImplVulkan_InitInfo vkInitInfo = m_renderer->GetImGuiInitInfo();
 		ImGui_ImplVulkan_Init(&vkInitInfo);
 	}
@@ -87,6 +89,7 @@ namespace Felina
 			ImGui_ImplVulkan_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
+			ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 			ImGui::ShowDemoWindow();
 			ImGui::Render();
 
