@@ -8,8 +8,6 @@ Its purpose is to provide a space for experimenting on topics such as real time 
 
 # Features
 
--
-
 # Roadmap
 ## Short term
 - deferred rendering
@@ -51,7 +49,7 @@ cmake ..
 6. Build and run the project.
 
 # Class diagram
-![Felina](https://github.com/user-attachments/assets/2db46a15-cc66-4667-97b0-2f1dc718a246)
+![Felina](https://github.com/user-attachments/assets/b19c5727-a0b8-480a-9816-a3992fd6236d)
 
 # Examples
 
