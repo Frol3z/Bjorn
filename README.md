@@ -1,18 +1,17 @@
-# Bjorn
+# Felina
 
-Bjorn is a Vulkan renderer I'm currently working on. This README will be updated soon.
+Felina is a Vulkan renderer I'm currently working on.
 
 # Features
 
 # Roadmap
 ## Short term
-- ImGUI integration
+- deferred rendering
 - material system
 - basic lighting
 ## Long term
 - PBR materials
-- shadow maps
-- deferred shading
+- cascaded shadow maps
 - hybrid GI
 
 # Getting Started
@@ -29,8 +28,8 @@ Bjorn is a Vulkan renderer I'm currently working on. This README will be updated
 ### Windows
 1. Clone this repository:
 ```bash
-git clone https://github.com/Frol3z/Bjorn.git
-cd Bjorn
+git clone https://github.com/Frol3z/Felina.git
+cd Felina
 ```
 2. Create and enter the build directory:
 ```bash
@@ -42,11 +41,11 @@ cd build
 cmake ..
 ```
 4. Open the generated **solution** inside the build folder.
-5. Set `Bjorn` as the **startup project** in Visual Studio.
+5. Set `Felina` as the **startup project** in Visual Studio.
 6. Build and run the project.
 
 # Class diagram
-![Bjorn](https://github.com/user-attachments/assets/2db46a15-cc66-4667-97b0-2f1dc718a246)
+![Felina](https://github.com/user-attachments/assets/2db46a15-cc66-4667-97b0-2f1dc718a246)
 
 # Examples
 

@@ -7,7 +7,7 @@ int main()
 {
 	try 
 	{
-		Felina::Application app("My App", 1280, 720);
+		Felina::Application app("Felina Renderer", 1280, 720);
 		app.Run();
 	}
 	catch (const std::exception& e) 
