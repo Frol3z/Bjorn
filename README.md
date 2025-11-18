@@ -1,5 +1,7 @@
 # Felina
 
+<img width="1280" height="720" alt="Felina" src="https://github.com/user-attachments/assets/9be41d49-08fc-422c-86ff-bcd861f5a675" />
+
 Felina is a Vulkan renderer written in C++.
 
 Initially started as a simple project with the goal of learning the Vulkan API, 
@@ -54,3 +56,7 @@ cmake ..
 # Examples
 
 # References
+https://docs.vulkan.org/tutorial/latest/00_Introduction.html
+https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html
+https://www.learncpp.com/
+https://www.realtimerendering.com/
