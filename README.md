@@ -1,8 +1,14 @@
 # Felina
 
-Felina is a Vulkan renderer I'm currently working on.
+Felina is a Vulkan renderer written in C++.
+
+Initially started as a simple project with the goal of learning the Vulkan API, 
+it has since evolved into a small (relatively speaking) framework which is actively being extended. 
+Its purpose is to provide a space for experimenting on topics such as real time rendering and game development.
 
 # Features
+
+-
 
 # Roadmap
 ## Short term
