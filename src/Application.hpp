@@ -9,6 +9,8 @@ namespace Felina
 	class Window;
 	class Scene;
 	class Renderer;
+	class Object;
+	class UI;
 
 	class Application 
 	{
@@ -30,6 +32,7 @@ namespace Felina
 
 			std::string m_name;
 			std::unique_ptr<Window> m_window = nullptr;
+			std::unique_ptr<UI> m_UI = nullptr;
 			std::unique_ptr<Scene> m_scene = nullptr;
 			std::unique_ptr<Renderer> m_renderer = nullptr;
 	};

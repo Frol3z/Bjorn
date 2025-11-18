@@ -9,7 +9,7 @@ namespace Felina
 	class Camera
 	{
 		public:
-			Camera(float width, float height, float nearPlane = 0.1f, float farPlane = 10.0f);
+			Camera(float width, float height, float nearPlane = 0.1f, float farPlane = 1000.0f);
 		
 			void UpdateProjectionMatrix(float newWidth, float newHeight);
 			void SetPosition(glm::vec3 newPosition);

@@ -190,9 +190,9 @@ namespace Felina
         m_globalUBOs[m_currentFrame]->LoadData(&globalUBO, sizeof(globalUBO));
 
         // Fill the object data storage buffer
-        std::vector<const Object*> objects = m_scene.GetObjects();
+        std::vector<Object*> objects = m_scene.GetObjects();
         std::vector<ObjectData> objectDatas;
-        for (const Object* obj : objects)
+        for (Object* obj : objects)
         {
             ObjectData data{};
             data.model = obj->GetModelMatrix();
@@ -651,10 +651,10 @@ namespace Felina
         );
         
         // Draw all the objects
-        std::vector<const Object*> objects = m_scene.GetObjects();
+        std::vector<Object*> objects = m_scene.GetObjects();
         for (uint32_t i = 0; i < objects.size(); i++)
         {
-            const Object* obj = objects[i];
+            Object* obj = objects[i];
 
             // Update object index
             PushConstants pc{ i };

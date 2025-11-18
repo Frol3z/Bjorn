@@ -27,9 +27,9 @@ namespace Felina
 		return *(it->second);
 	}
 
-	std::vector<const Object*> Scene::GetObjects() const
+	std::vector<Object*> Scene::GetObjects() const
 	{
-		std::vector<const Object*> objects;
+		std::vector<Object*> objects;
 		objects.reserve(m_objects.size());
 		for (const auto& [_, obj] : m_objects)
 			objects.push_back(obj.get());

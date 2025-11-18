@@ -2,6 +2,7 @@
 
 #include "ResourceManager.hpp"
 #include "Window.hpp"
+#include "UI.hpp"
 #include "Scene.hpp"
 #include "Renderer.hpp"
 
@@ -18,6 +19,7 @@ namespace Felina
 		InitGlfw();
 
 		m_window = std::make_unique<Window>(windowWidth, windowHeight, m_name, *this);
+		m_UI = std::make_unique<UI>();
 		m_scene = std::make_unique<Scene>(windowWidth, windowHeight);
 		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
 
@@ -83,18 +85,7 @@ namespace Felina
 	{
 		while (!m_window->ShouldClose()) {
 			glfwPollEvents();
-
-			// Dear ImGui frame
-			// TODO: move ImGui update in appropriate function
-			ImGui_ImplVulkan_NewFrame();
-			ImGui_ImplGlfw_NewFrame();
-			ImGui::NewFrame();
-			ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
-			ImGui::ShowDemoWindow();
-			ImGui::Render();
-
-			// User interaction with the scene
-
+			m_UI->Update(*m_scene);
 			m_renderer->DrawFrame();
 		}
 
@@ -108,9 +99,13 @@ namespace Felina
 		auto& rm = ResourceManager::GetInstance(*m_renderer);
 		rm.UnloadAll();
 
+		// ImGui
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
+
+		// GLFW
+		m_window.reset();
 		glfwTerminate();
 	}
 }
