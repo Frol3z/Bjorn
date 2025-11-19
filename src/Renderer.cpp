@@ -7,6 +7,7 @@
 #include "Device.hpp"
 #include "Swapchain.hpp"
 #include "Buffer.hpp"
+#include "Image.hpp"
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -39,6 +40,7 @@ namespace Felina
         CreateSurface();
         CreateDevice();
         CreateSwapchain();
+        CreateGBuffer();
         CreateDescriptorSetLayout();
         CreatePushConstant();
         CreateGraphicsPipeline();
@@ -302,6 +304,29 @@ namespace Felina
     void Renderer::CreateSwapchain()
     {
         m_swapchain = std::make_unique<Swapchain>(*m_device, m_window, m_surface);
+    }
+
+    void Renderer::CreateGBuffer()
+    {
+        VkExtent2D swapchainExtent = m_swapchain->GetExtent();
+
+        vk::ImageCreateInfo imageCreateInfo = {
+            .imageType = vk::ImageType::e2D,
+            .format = vk::Format::eR8G8B8A8Unorm,
+            .extent = vk::Extent3D{ swapchainExtent.width, swapchainExtent.height, 1 },
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = vk::SampleCountFlagBits::e1,
+            .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+            .sharingMode = vk::SharingMode::eExclusive,
+            .initialLayout = vk::ImageLayout::eUndefined
+        };
+
+        VmaAllocationCreateInfo allocationCreateInfo{};
+        allocationCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+        Image image(*m_device, imageCreateInfo, allocationCreateInfo);
     }
 
     void Renderer::CreateDescriptorSetLayout()

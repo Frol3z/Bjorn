@@ -67,6 +67,7 @@ namespace Felina
 			void CreateSurface();
 			void CreateDevice();
 			void CreateSwapchain();
+			void CreateGBuffer();
 			void CreateDescriptorSetLayout();
 			void CreatePushConstant();
 			void CreateGraphicsPipeline();
