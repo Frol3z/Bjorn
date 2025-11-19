@@ -8,8 +8,18 @@ namespace Felina
 		: m_allocator(device.GetAllocator())
 	{
 		// Image
-		VkImage raw;
-		vmaCreateImage(m_allocator, &*imageInfo, &allocInfo, &raw, &m_allocation, nullptr);
+		VkImage raw = VK_NULL_HANDLE;
+		VkResult res = vmaCreateImage(
+			m_allocator,
+			reinterpret_cast<const VkImageCreateInfo*>(&imageInfo),
+			&allocInfo,
+			&raw,
+			&m_allocation,
+			nullptr
+		);
+		if (res != VK_SUCCESS)
+			throw std::runtime_error("[IMAGE] vmaCreateImage: " + std::to_string(res));
+
 		m_image = vk::Image(raw);
 
 		// Image View

@@ -23,6 +23,7 @@ namespace Felina
 	class Application;
 	class Device;
 	class Swapchain;
+	class GBuffer;
 	class Buffer;
 	class Window;
 	class Scene;
@@ -108,6 +109,7 @@ namespace Felina
 			vk::raii::SurfaceKHR m_surface = nullptr;
 			std::unique_ptr<Device> m_device = nullptr;
 			std::unique_ptr<Swapchain> m_swapchain = nullptr;
+			std::unique_ptr<GBuffer> m_gBuffer = nullptr;
 
 			vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
 			vk::PushConstantRange m_pushConstantRange;
