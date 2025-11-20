@@ -17,6 +17,7 @@ namespace Felina
 			~Image();
 
 			const vk::Image& GetHandle() const { return m_image; };
+			const vk::raii::ImageView& GetImageView() const { return m_imageView; }
 
 		private:
 			void CreateImageView(const Device& device, const vk::ImageCreateInfo& imageInfo);

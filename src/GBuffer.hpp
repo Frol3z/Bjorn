@@ -13,21 +13,33 @@ namespace Felina
 	class GBuffer
 	{
 		public:
-			GBuffer(const Device& device, vk::Extent2D extent);
+			GBuffer(
+				const Device& device, 
+				vk::Extent2D extent,
+				vk::raii::DescriptorPool& descriptorPool,
+				const uint32_t maxFramesInFlight
+			);
 
 		private:
-			void CreateAlbedoRenderTarget(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
-			void CreateSpecularRenderTarget(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
-			void CreateNormalRenderTarget(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
-			void CreateDepthRenderTarget(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
+			enum AttachmentType {Albedo = 0, Specular, Normal, Depth};
+			struct Attachment
+			{
+				AttachmentType type;
+				std::unique_ptr<Image> image = nullptr;
+			};
+
+			void CreateAlbedoAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
+			void CreateSpecularAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
+			void CreateNormalAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
+			void CreateDepthAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
+			void CreateSampler(const Device& device);
+			void CreateDescriptorSetLayout(const Device& device);
+			void CreateDescriptorSets(const Device& device, vk::raii::DescriptorPool& descriptorPool, const uint32_t maxFramesInFlight);
 
 			vk::Extent2D m_extent;
-
-			std::unique_ptr<Image> m_albedo = nullptr;
-			std::unique_ptr<Image> m_specular = nullptr;
-			std::unique_ptr<Image> m_normal = nullptr;
-			std::unique_ptr<Image> m_depth = nullptr;
-
-			vk::Sampler m_sampler;
+			std::vector<Attachment> m_attachments;
+			vk::raii::Sampler m_sampler = nullptr;
+			vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
+			std::vector<vk::raii::DescriptorSet> m_descriptorSets;
 	};
 }

@@ -109,6 +109,8 @@ namespace Felina
 			vk::raii::SurfaceKHR m_surface = nullptr;
 			std::unique_ptr<Device> m_device = nullptr;
 			std::unique_ptr<Swapchain> m_swapchain = nullptr;
+			vk::raii::DescriptorPool m_descriptorPool = nullptr;
+			vk::raii::CommandPool m_commandPool = nullptr;
 			std::unique_ptr<GBuffer> m_gBuffer = nullptr;
 
 			vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
@@ -117,13 +119,10 @@ namespace Felina
 			vk::raii::PipelineLayout m_pipelineLayout = nullptr;
 			vk::raii::Pipeline m_graphicsPipeline = nullptr;
 
-			vk::raii::CommandPool m_commandPool = nullptr;
 			std::vector<vk::raii::CommandBuffer> m_commandBuffers;
 
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_globalUBOs;
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;
-
-			vk::raii::DescriptorPool m_descriptorPool = nullptr;
 			std::vector<vk::raii::DescriptorSet> m_descriptorSets;
 
 			std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;

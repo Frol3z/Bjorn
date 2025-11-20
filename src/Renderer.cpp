@@ -41,6 +41,7 @@ namespace Felina
         CreateSurface();
         CreateDevice();
         CreateSwapchain();
+        CreateDescriptorPool();
         CreateGBuffer();
         CreateDescriptorSetLayout();
         CreatePushConstant();
@@ -48,7 +49,6 @@ namespace Felina
         CreateCommandPool();
         CreateCommandBuffer();
         CreateUniformBuffers();
-        CreateDescriptorPool();
         CreateDescriptorSets();
         CreateSyncObjects();
     }
@@ -309,7 +309,12 @@ namespace Felina
 
     void Renderer::CreateGBuffer()
     {
-        m_gBuffer = std::make_unique<GBuffer>(*m_device, m_swapchain->GetExtent());
+        m_gBuffer = std::make_unique<GBuffer>(
+            *m_device, 
+            m_swapchain->GetExtent(),
+            m_descriptorPool,
+            MAX_FRAMES_IN_FLIGHT
+        );
     }
 
     void Renderer::CreateDescriptorSetLayout()
@@ -528,14 +533,26 @@ namespace Felina
 
     void Renderer::CreateDescriptorPool()
     {
-        std::array<vk::DescriptorPoolSize, 2> poolSizes {
+        // TODO: remove hardcoded max number of combined sampler
+        uint32_t attachmentsCount = 4 * MAX_FRAMES_IN_FLIGHT;
+        std::array<vk::DescriptorPoolSize, 3> poolSizes {
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
-            vk::DescriptorPoolSize { .type = vk::DescriptorType::eStorageBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT }
+            vk::DescriptorPoolSize { .type = vk::DescriptorType::eStorageBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
+            vk::DescriptorPoolSize { 
+                .type = vk::DescriptorType::eCombinedImageSampler,
+                .descriptorCount = attachmentsCount
+            }
         };
+
+        // NOTE:
+        // Current sets:
+        // - global UBO and SSBO set (see below)
+        // - GBuffer (see GBuffer class)
+        // Multiplied by MAX_FRAMES_IN_FLIGHT
 
         vk::DescriptorPoolCreateInfo poolInfo{
             .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            .maxSets = MAX_FRAMES_IN_FLIGHT,
+            .maxSets = MAX_FRAMES_IN_FLIGHT * 2, // TODO: remove hardcoded number of sets
             .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
             .pPoolSizes = poolSizes.data()
         };
@@ -545,7 +562,7 @@ namespace Felina
     void Renderer::CreateDescriptorSets()
     {
         // Descriptor sets allocation
-        std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *m_descriptorSetLayout);
+        std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_descriptorSetLayout);
         vk::DescriptorSetAllocateInfo allocInfo{
             .descriptorPool = m_descriptorPool,
             .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
