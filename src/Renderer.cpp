@@ -207,7 +207,8 @@ namespace Felina
     void Renderer::UpdateOnFramebufferResized()
     {
         m_app.isFramebufferResized.store(false);
-        m_swapchain->RecreateSwapchain();
+        m_swapchain->Recreate();
+        m_gBuffer->Recreate(*m_device, m_swapchain->GetExtent(), m_descriptorPool, MAX_FRAMES_IN_FLIGHT);
     }
 
 	void Renderer::CreateInstance() 

@@ -10,11 +10,11 @@ namespace Felina
 	Swapchain::Swapchain(const Device& device, const Window& window, const vk::raii::SurfaceKHR& surface)
         : m_device(device), m_surface(surface), m_window(window)
 	{
-		CreateSwapchain();
+		Create();
         CreateImageViews();
 	}
 
-    void Swapchain::RecreateSwapchain() 
+    void Swapchain::Recreate() 
     {
         // Handling minimization
         int width = 0, height = 0;
@@ -27,8 +27,8 @@ namespace Felina
 
         m_device.GetDevice().waitIdle();
 
-        CleanUpSwapchain();
-        CreateSwapchain();
+        CleanUp();
+        Create();
         CreateImageViews();
     }
 
@@ -37,7 +37,7 @@ namespace Felina
         return m_swapchain.acquireNextImage(UINT64_MAX, s, nullptr);
     }
 
-	void Swapchain::CreateSwapchain()
+	void Swapchain::Create()
 	{
         const auto& physicalDevice = m_device.GetPhysicalDevice();
 
@@ -49,8 +49,8 @@ namespace Felina
         std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR(m_surface);
 
         // Choose suitable surface format and extent
-        m_swapchainSurfaceFormat = ChooseSwapchainSurfaceFormat(availableFormats);
-        m_swapchainExtent = ChooseSwapchainExtent(surfaceCapabilities);
+        m_swapchainSurfaceFormat = ChooseSurfaceFormat(availableFormats);
+        m_swapchainExtent = ChooseExtent(surfaceCapabilities);
 
         // Choose how many images to have in the swapchain
         auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
@@ -74,7 +74,7 @@ namespace Felina
             .imageSharingMode = vk::SharingMode::eExclusive, // NOTE: assuming graphics and presentation queue family is the same
             .preTransform = surfaceCapabilities.currentTransform,
             .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-            .presentMode = ChooseSwapchainPresentMode(availablePresentModes),
+            .presentMode = ChoosePresentMode(availablePresentModes),
             .clipped = true,
             .oldSwapchain = nullptr
         };
@@ -84,7 +84,7 @@ namespace Felina
         m_swapchainImages = m_swapchain.getImages();
 	}
 
-    void Swapchain::CleanUpSwapchain()
+    void Swapchain::CleanUp()
     {
         m_swapchainImageViews.clear();
         m_swapchain = nullptr;
@@ -110,7 +110,7 @@ namespace Felina
         }
     }
 
-    vk::SurfaceFormatKHR Swapchain::ChooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
+    vk::SurfaceFormatKHR Swapchain::ChooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
     {
         for (const auto& availableFormat : availableFormats) {
             if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
@@ -119,7 +119,7 @@ namespace Felina
         return availableFormats[0];
     }
 
-    vk::Extent2D Swapchain::ChooseSwapchainExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
+    vk::Extent2D Swapchain::ChooseExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
     {
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
             return capabilities.currentExtent;
@@ -133,7 +133,7 @@ namespace Felina
         };
     }
 
-    vk::PresentModeKHR Swapchain::ChooseSwapchainPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
+    vk::PresentModeKHR Swapchain::ChoosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
     {
         // NOTE: it should be using mailbox but I want vsync rn
         for (const auto& availablePresentMode : availablePresentModes) {

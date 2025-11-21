@@ -2,21 +2,16 @@
 
 #include "Device.hpp"
 
-#include <iostream>
-
 namespace Felina
 {
 	GBuffer::GBuffer(
         const Device& device,
-        vk::Extent2D extent,
+        vk::Extent2D swapchainExtent,
         vk::raii::DescriptorPool& descriptorPool,
         const uint32_t maxFramesInFlight
     )
-        : m_extent(extent)
+        : m_extent(swapchainExtent)
 	{
-        // NOTE:
-        // - the extent should be updated when the framebuffer is resized
-
         VmaAllocationCreateInfo allocCreateInfo{};
         allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
@@ -30,6 +25,31 @@ namespace Felina
         CreateDescriptorSetLayout(device);
         CreateDescriptorSets(device, descriptorPool, maxFramesInFlight);
 	}
+
+    void GBuffer::Recreate(
+        const Device& device,
+        vk::Extent2D swapchainExtent,
+        vk::raii::DescriptorPool& descriptorPool,
+        const uint32_t maxFramesInFlight
+    )
+    {
+        // Clean up the "old" G-buffer
+        CleanUp();
+        
+        // Update local extent with the resized swapchain extent
+        m_extent = swapchainExtent;
+
+        // Recreate images and descriptor sets
+        // NOTE: sampler and descriptor sets layout DO NOT need to be recreated
+        VmaAllocationCreateInfo allocCreateInfo{};
+        allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+        CreateAlbedoAttachment(device, allocCreateInfo);
+        CreateSpecularAttachment(device, allocCreateInfo);
+        CreateNormalAttachment(device, allocCreateInfo);
+        CreateDepthAttachment(device, allocCreateInfo);
+        CreateDescriptorSets(device, descriptorPool, maxFramesInFlight);
+    }
 
     void GBuffer::CreateAlbedoAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo)
     {
@@ -198,5 +218,11 @@ namespace Felina
             }
             device.GetDevice().updateDescriptorSets(descriptorWrites, {});
         }
+    }
+
+    void GBuffer::CleanUp()
+    {
+        m_descriptorSets.clear();
+        m_attachments.clear();
     }
 }

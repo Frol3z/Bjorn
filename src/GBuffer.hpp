@@ -15,7 +15,14 @@ namespace Felina
 		public:
 			GBuffer(
 				const Device& device, 
-				vk::Extent2D extent,
+				vk::Extent2D swapchainExtent,
+				vk::raii::DescriptorPool& descriptorPool,
+				const uint32_t maxFramesInFlight
+			);
+
+			void Recreate(
+				const Device& device,
+				vk::Extent2D swapchainExtent,
 				vk::raii::DescriptorPool& descriptorPool,
 				const uint32_t maxFramesInFlight
 			);
@@ -35,6 +42,7 @@ namespace Felina
 			void CreateSampler(const Device& device);
 			void CreateDescriptorSetLayout(const Device& device);
 			void CreateDescriptorSets(const Device& device, vk::raii::DescriptorPool& descriptorPool, const uint32_t maxFramesInFlight);
+			void CleanUp();
 
 			vk::Extent2D m_extent;
 			std::vector<Attachment> m_attachments;
