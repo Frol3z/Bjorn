@@ -32,7 +32,6 @@ struct VertexOutput {
     float3 color : COLOR;
 };
 
-[shader("vertex")]
 VertexOutput vertMain(uint vertexId: SV_VertexID, VertexInput input) {
     VertexOutput output;
     float4x4 model = objectBuffer[pushConsts.objectIndex].model;
@@ -41,7 +40,6 @@ VertexOutput vertMain(uint vertexId: SV_VertexID, VertexInput input) {
     return output;
 }
 
-[shader("pixel")]
 float4 fragMain(VertexOutput inVert) : SV_Target {
     return float4(inVert.color, 1.0);
 }

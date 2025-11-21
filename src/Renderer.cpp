@@ -483,18 +483,21 @@ namespace Felina
         // ---- GEOMETRY PASS ----
 
         // Create shader module
-        auto shaderPath = std::filesystem::current_path() / "./shaders/shader.spv";
-        vk::raii::ShaderModule shaderModule = CreateShaderModule(ReadFile(shaderPath.string()));
+        // TODO: use deferred shader
+        auto vertShaderPath = std::filesystem::current_path() / "./shaders/forward.vert.spv";
+        auto fragShaderPath = std::filesystem::current_path() / "./shaders/forward.frag.spv";
+        vk::raii::ShaderModule vertShaderModule = CreateShaderModule(ReadFile(vertShaderPath.string()));
+        vk::raii::ShaderModule fragShaderModule = CreateShaderModule(ReadFile(fragShaderPath.string()));
 
         // ShaderStageCreateInfo
         vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eVertex,
-            .module = shaderModule,
+            .module = vertShaderModule,
             .pName = "vertMain"
         };
         vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eFragment,
-            .module = shaderModule,
+            .module = fragShaderModule,
             .pName = "fragMain"
         };
         vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
@@ -605,18 +608,20 @@ namespace Felina
         // ---- LIGHTING PASS ----
 
         // Create shader module
-        auto lightingShaderPath = std::filesystem::current_path() / "./shaders/shader.spv";
-        vk::raii::ShaderModule lightingShaderModule = CreateShaderModule(ReadFile(lightingShaderPath.string()));
+        auto lightingVertShaderPath = std::filesystem::current_path() / "./shaders/forward.vert.spv";
+        auto lightingFragShaderPath = std::filesystem::current_path() / "./shaders/forward.frag.spv";
+        vk::raii::ShaderModule lightingVertShaderModule = CreateShaderModule(ReadFile(lightingVertShaderPath.string()));
+        vk::raii::ShaderModule lightingFragShaderModule = CreateShaderModule(ReadFile(lightingFragShaderPath.string()));
 
         // ShaderStageCreateInfo
         vk::PipelineShaderStageCreateInfo lightingVertShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eVertex,
-            .module = lightingShaderModule,
+            .module = lightingVertShaderModule,
             .pName = "vertMain"
         };
         vk::PipelineShaderStageCreateInfo lightingFragShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eFragment,
-            .module = lightingShaderModule,
+            .module = lightingFragShaderModule,
             .pName = "fragMain"
         };
         vk::PipelineShaderStageCreateInfo lightingShaderStages[] = { lightingVertShaderStageInfo, lightingFragShaderStageInfo };
@@ -687,7 +692,7 @@ namespace Felina
         // Read starting from the end to determine the size of the file
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
-            throw std::runtime_error("Failed to open file!");
+            throw std::runtime_error("Failed to open file: " + filename);
         }
 
         std::vector<char> buffer(file.tellg());
