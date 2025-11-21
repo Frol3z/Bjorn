@@ -7,8 +7,7 @@ namespace Felina
 	GBuffer::GBuffer(
         const Device& device,
         vk::Extent2D swapchainExtent,
-        vk::raii::DescriptorPool& descriptorPool,
-        const uint32_t maxFramesInFlight
+        vk::raii::DescriptorPool& descriptorPool
     )
         : m_extent(swapchainExtent)
 	{
@@ -23,14 +22,36 @@ namespace Felina
         CreateSampler(device);
 
         CreateDescriptorSetLayout(device);
-        CreateDescriptorSets(device, descriptorPool, maxFramesInFlight);
+        CreateDescriptorSets(device, descriptorPool);
 	}
+
+    std::vector<vk::Format> GBuffer::GetColorAttachmentFormats() const
+    {
+        std::vector<vk::Format> m_formats;
+        for (const auto& attachment : m_attachments)
+        {
+            if (attachment.type == AttachmentType::Depth)
+                continue;
+
+            m_formats.push_back(attachment.image->GetFormat());
+        }
+        return m_formats;
+    }
+
+    vk::Format GBuffer::GetDepthFormat() const
+    {
+        for (const auto& attachment : m_attachments)
+        {
+            if (attachment.type == AttachmentType::Depth)
+                return attachment.image->GetFormat();
+        }
+        throw std::runtime_error("[GBUFFER] Couldn't retrieve the G-buffer depth attachment format because there's no such attachment!");
+    }
 
     void GBuffer::Recreate(
         const Device& device,
         vk::Extent2D swapchainExtent,
-        vk::raii::DescriptorPool& descriptorPool,
-        const uint32_t maxFramesInFlight
+        vk::raii::DescriptorPool& descriptorPool
     )
     {
         // Clean up the "old" G-buffer
@@ -48,7 +69,7 @@ namespace Felina
         CreateSpecularAttachment(device, allocCreateInfo);
         CreateNormalAttachment(device, allocCreateInfo);
         CreateDepthAttachment(device, allocCreateInfo);
-        CreateDescriptorSets(device, descriptorPool, maxFramesInFlight);
+        CreateDescriptorSets(device, descriptorPool);
     }
 
     void GBuffer::CreateAlbedoAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo)
@@ -181,48 +202,43 @@ namespace Felina
         m_descriptorSetLayout = vk::raii::DescriptorSetLayout(device.GetDevice(), layoutInfo);
     }
 
-    void GBuffer::CreateDescriptorSets(const Device& device, vk::raii::DescriptorPool& descriptorPool, const uint32_t maxFramesInFlight)
+    void GBuffer::CreateDescriptorSets(const Device& device, vk::raii::DescriptorPool& descriptorPool)
     {
         // Allocate descriptor sets
-        std::vector<vk::DescriptorSetLayout> layouts(maxFramesInFlight, m_descriptorSetLayout);
         vk::DescriptorSetAllocateInfo allocInfo{
             .descriptorPool = descriptorPool,
-            .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
-            .pSetLayouts = layouts.data()
+            .descriptorSetCount = 1,
+            .pSetLayouts = &*m_descriptorSetLayout
         };
-        m_descriptorSets = device.GetDevice().allocateDescriptorSets(allocInfo);
+        m_descriptorSet = std::move(device.GetDevice().allocateDescriptorSets(allocInfo)[0]);
 
-        // Bind the images to the descriptor sets
-        for (size_t i = 0; i < maxFramesInFlight; i++)
+        std::vector<vk::DescriptorImageInfo> imageInfos(m_attachments.size());
+        std::vector<vk::WriteDescriptorSet> descriptorWrites(m_attachments.size());
+        for (size_t j = 0; j < m_attachments.size(); j++)
         {
-            std::vector<vk::DescriptorImageInfo> imageInfos(m_attachments.size());
-            std::vector<vk::WriteDescriptorSet> descriptorWrites(m_attachments.size());
-            for (size_t j = 0; j < m_attachments.size(); j++)
-            {
-                // DescriptorImageInfo
-                imageInfos[j] = vk::DescriptorImageInfo{
-                    .sampler = m_sampler,
-                    .imageView = m_attachments[j].image->GetImageView(),
-                    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-                };
+            // DescriptorImageInfo
+            imageInfos[j] = vk::DescriptorImageInfo{
+                .sampler = m_sampler,
+                .imageView = m_attachments[j].image->GetImageView(),
+                .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+            };
 
-                // WriteDescriptorSet
-                descriptorWrites[j] = vk::WriteDescriptorSet{
-                    .dstSet = m_descriptorSets[i],
-                    .dstBinding = static_cast<uint32_t>(j),
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                    .pImageInfo = &imageInfos[j]
-                };
-            }
-            device.GetDevice().updateDescriptorSets(descriptorWrites, {});
+            // WriteDescriptorSet
+            descriptorWrites[j] = vk::WriteDescriptorSet{
+                .dstSet = m_descriptorSet,
+                .dstBinding = static_cast<uint32_t>(j),
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                .pImageInfo = &imageInfos[j]
+            };
         }
+        device.GetDevice().updateDescriptorSets(descriptorWrites, {});
     }
 
     void GBuffer::CleanUp()
     {
-        m_descriptorSets.clear();
+        m_descriptorSet = nullptr;
         m_attachments.clear();
     }
 }

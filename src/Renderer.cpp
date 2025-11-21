@@ -45,7 +45,8 @@ namespace Felina
         CreateGBuffer();
         CreateDescriptorSetLayout();
         CreatePushConstant();
-        CreateGraphicsPipeline();
+        CreateForwardPipeline();
+        CreateDeferredPipeline();
         CreateCommandPool();
         CreateCommandBuffer();
         CreateUniformBuffers();
@@ -95,7 +96,7 @@ namespace Felina
 
         // Record command buffer and reset draw fence
         m_device->GetDevice().resetFences(*m_inFlightFences[m_currentFrame]);
-        RecordCommandBuffer(imageIndex);
+        RecordForwardCommandBuffer(imageIndex);
 
         // Submit commands to the queue
         vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -208,7 +209,11 @@ namespace Felina
     {
         m_app.isFramebufferResized.store(false);
         m_swapchain->Recreate();
-        m_gBuffer->Recreate(*m_device, m_swapchain->GetExtent(), m_descriptorPool, MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < m_gBuffers.size(); i++)
+        {
+            m_gBuffers[i]->Recreate(*m_device, m_swapchain->GetExtent(), m_descriptorPool);
+        }
     }
 
 	void Renderer::CreateInstance() 
@@ -310,12 +315,14 @@ namespace Felina
 
     void Renderer::CreateGBuffer()
     {
-        m_gBuffer = std::make_unique<GBuffer>(
-            *m_device, 
-            m_swapchain->GetExtent(),
-            m_descriptorPool,
-            MAX_FRAMES_IN_FLIGHT
-        );
+        for (size_t i = 0; i < m_gBuffers.size(); i++)
+        {
+            m_gBuffers[i] = std::make_unique<GBuffer>(
+                *m_device,
+                m_swapchain->GetExtent(),
+                m_descriptorPool
+            );
+        }
     }
 
     void Renderer::CreateDescriptorSetLayout()
@@ -349,7 +356,7 @@ namespace Felina
         m_pushConstantRange.size = sizeof(PushConstants);
     }
 
-    void Renderer::CreateGraphicsPipeline()
+    void Renderer::CreateForwardPipeline()
     {
         // Create shader module
         auto shaderPath = std::filesystem::current_path() / "./shaders/shader.spv";
@@ -434,7 +441,7 @@ namespace Felina
             .pushConstantRangeCount = 1,
             .pPushConstantRanges = &m_pushConstantRange
         };
-        m_pipelineLayout = vk::raii::PipelineLayout(m_device->GetDevice(), pipelineLayoutInfo);
+        m_fwdPipelineLayout = vk::raii::PipelineLayout(m_device->GetDevice(), pipelineLayoutInfo);
 
         // PipelineRenderingCreateInfo
         // It specifies the formats of the attachment used with dynamic rendering
@@ -455,12 +462,212 @@ namespace Felina
             .pMultisampleState = &multisampling,
             .pColorBlendState = &colorBlending,
             .pDynamicState = &dynamicState,
-            .layout = m_pipelineLayout,
+            .layout = m_fwdPipelineLayout,
             .renderPass = nullptr // Because we are using dynamic rendering
         };
 
         // FINALLY!
-        m_graphicsPipeline = vk::raii::Pipeline(m_device->GetDevice(), nullptr, pipelineInfo);
+        m_fwdPipeline = vk::raii::Pipeline(m_device->GetDevice(), nullptr, pipelineInfo);
+    }
+
+    void Renderer::CreateDeferredPipeline()
+    {
+        // TODO: refactor
+        // - abstract pipeline object
+        // - improve shader handling
+
+        auto& gBuffer = m_gBuffers[0];
+
+        // ---- GEOMETRY PASS ----
+
+        // Create shader module
+        auto shaderPath = std::filesystem::current_path() / "./shaders/shader.spv";
+        vk::raii::ShaderModule shaderModule = CreateShaderModule(ReadFile(shaderPath.string()));
+
+        // ShaderStageCreateInfo
+        vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eVertex,
+            .module = shaderModule,
+            .pName = "vertMain"
+        };
+        vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eFragment,
+            .module = shaderModule,
+            .pName = "fragMain"
+        };
+        vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+        // VertexInput
+        auto bindingDescription = Vertex::GetBindingDescription();
+        auto attributeDescriptions = Vertex::GetAttributeDescriptions();
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
+            .vertexBindingDescriptionCount = 1,
+            .pVertexBindingDescriptions = &bindingDescription,
+            .vertexAttributeDescriptionCount = attributeDescriptions.size(),
+            .pVertexAttributeDescriptions = attributeDescriptions.data()
+        };
+
+        // InputAssembly
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{ .topology = vk::PrimitiveTopology::eTriangleList };
+
+        // Dynamic viewport and scissors placeholders (will be set through the command buffer)
+        std::vector dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+        vk::PipelineDynamicStateCreateInfo dynamicState{
+            .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+            .pDynamicStates = dynamicStates.data()
+        };
+        // We just need to specify how many there are at pipeline creation time
+        vk::PipelineViewportStateCreateInfo viewportState{ .viewportCount = 1, .scissorCount = 1 };
+
+        // Rasterizer
+        vk::PipelineRasterizationStateCreateInfo rasterizer{
+            .depthClampEnable = vk::False, // Clamp out of bound depth values to the near or far plane
+            .rasterizerDiscardEnable = vk::False, // Disable rasterization (no output)
+            .polygonMode = vk::PolygonMode::eFill, // For wireframe mode a GPU feature must be enabled
+            .cullMode = vk::CullModeFlagBits::eBack, // Self explanatory
+            .frontFace = vk::FrontFace::eCounterClockwise,
+            .depthBiasEnable = vk::False,
+            .depthBiasSlopeFactor = 1.0f,
+            .lineWidth = 1.0f
+        };
+
+        // MSAA (currently disabled because it requires enabling a GPU feature)
+        vk::PipelineMultisampleStateCreateInfo multisampling{
+            .rasterizationSamples = vk::SampleCountFlagBits::e1,
+            .sampleShadingEnable = vk::False
+        };
+
+        // Depth (and stencil) attachment
+        vk::PipelineDepthStencilStateCreateInfo depthStencil{
+            .depthTestEnable = vk::True,  // enable depth testing
+            .depthWriteEnable = vk::True, // enable writing to the depth attachment
+            .depthCompareOp = vk::CompareOp::eLess, // if fragment < depth then the test is passed (+Z forward)
+            .depthBoundsTestEnable = vk::False,
+            .stencilTestEnable = vk::False // stencil test disabled for now
+        };
+
+        // Color blending (disabled)
+        // NOTE: NOT SPECIFIED for the depth attachments
+        std::vector <vk::PipelineColorBlendAttachmentState> colorBlendAttachments(gBuffer->GetAttachmentsCount() - 1);
+        for (auto& attachment : colorBlendAttachments)
+        {
+            attachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | 
+                vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+            attachment.blendEnable = vk::False;
+        }
+
+        // Blending with bitwise operations
+        vk::PipelineColorBlendStateCreateInfo colorBlending{
+            .logicOpEnable = vk::False,
+            .logicOp = vk::LogicOp::eCopy,
+            .attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
+            .pAttachments = colorBlendAttachments.data()
+        };
+
+        // Pipeline layout (descriptors layout and push constants)
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
+            .setLayoutCount = 1,
+            .pSetLayouts = &*m_descriptorSetLayout,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &m_pushConstantRange
+        };
+        m_defGeometryPipelineLayout = vk::raii::PipelineLayout(m_device->GetDevice(), pipelineLayoutInfo);
+
+        // PipelineRenderingCreateInfo
+        // It specifies the formats of the attachment used with dynamic rendering
+        auto colorAttachmentFormats = gBuffer->GetColorAttachmentFormats();
+        vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{
+            .colorAttachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
+            .pColorAttachmentFormats = colorAttachmentFormats.data(),
+            .depthAttachmentFormat = gBuffer->GetDepthFormat()
+        };
+
+        // GraphicsPipelineCreateInfo
+        vk::GraphicsPipelineCreateInfo pipelineInfo{
+            .pNext = &pipelineRenderingCreateInfo,
+            .stageCount = 2,
+            .pStages = shaderStages,
+            .pVertexInputState = &vertexInputInfo,
+            .pInputAssemblyState = &inputAssembly,
+            .pViewportState = &viewportState,
+            .pRasterizationState = &rasterizer,
+            .pMultisampleState = &multisampling,
+            .pDepthStencilState = &depthStencil,
+            .pColorBlendState = &colorBlending,
+            .pDynamicState = &dynamicState,
+            .layout = m_defGeometryPipelineLayout,
+            .renderPass = nullptr // Because we are using dynamic rendering
+        };
+        m_defGeometryPipeline = vk::raii::Pipeline(m_device->GetDevice(), nullptr, pipelineInfo);
+
+        // ---- LIGHTING PASS ----
+
+        // Create shader module
+        auto lightingShaderPath = std::filesystem::current_path() / "./shaders/shader.spv";
+        vk::raii::ShaderModule lightingShaderModule = CreateShaderModule(ReadFile(lightingShaderPath.string()));
+
+        // ShaderStageCreateInfo
+        vk::PipelineShaderStageCreateInfo lightingVertShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eVertex,
+            .module = lightingShaderModule,
+            .pName = "vertMain"
+        };
+        vk::PipelineShaderStageCreateInfo lightingFragShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eFragment,
+            .module = lightingShaderModule,
+            .pName = "fragMain"
+        };
+        vk::PipelineShaderStageCreateInfo lightingShaderStages[] = { lightingVertShaderStageInfo, lightingFragShaderStageInfo };
+
+        // VertexInput (empty)
+        // NOTE: a full screen quad will we drawn at draw time
+        vk::PipelineVertexInputStateCreateInfo lightingVertexInputInfo{};
+
+        // Color blending (disabled)
+        vk::PipelineColorBlendAttachmentState lightingColorBlendAttachment{
+            .blendEnable = vk::False,
+            .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                              vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+        };
+
+        // Blending with bitwise operations
+        vk::PipelineColorBlendStateCreateInfo lightingColorBlending{
+            .logicOpEnable = vk::False,
+            .logicOp = vk::LogicOp::eCopy,
+            .attachmentCount = 1,
+            .pAttachments = &lightingColorBlendAttachment
+        };
+
+        // Pipeline layout (descriptors layout and push constants)
+        vk::PipelineLayoutCreateInfo lightingPipelineLayoutInfo{
+            .setLayoutCount = 1,
+            .pSetLayouts = &*gBuffer->GetDescriptorSetLayout(),
+        };
+        m_defLightingPipelineLayout = vk::raii::PipelineLayout(m_device->GetDevice(), lightingPipelineLayoutInfo);
+
+        // PipelineRenderingCreateInfo
+        // It specifies the formats of the attachment used with dynamic rendering
+        vk::PipelineRenderingCreateInfo lightingPipelineRenderingCreateInfo{
+            .colorAttachmentCount = 1,
+            .pColorAttachmentFormats = &m_swapchain->GetSurfaceFormat().format
+        };
+
+        // GraphicsPipelineCreateInfo
+        vk::GraphicsPipelineCreateInfo lightingPipelineInfo{
+            .pNext = &lightingPipelineRenderingCreateInfo,
+            .stageCount = 2,
+            .pStages = lightingShaderStages,
+            .pVertexInputState = &lightingVertexInputInfo,
+            .pInputAssemblyState = &inputAssembly,
+            .pViewportState = &viewportState,
+            .pRasterizationState = &rasterizer,
+            .pMultisampleState = &multisampling,
+            .pColorBlendState = &lightingColorBlending,
+            .pDynamicState = &dynamicState,
+            .layout = m_defLightingPipelineLayout,
+            .renderPass = nullptr // Because we are using dynamic rendering
+        };
+        m_defLightingPipeline = vk::raii::Pipeline(m_device->GetDevice(), nullptr, pipelineInfo);
     }
 
     vk::raii::ShaderModule Renderer::CreateShaderModule(const std::vector<char>& code) const
@@ -625,14 +832,14 @@ namespace Felina
         }
     }
 
-    void Renderer::RecordCommandBuffer(uint32_t imageIndex)
+    void Renderer::RecordForwardCommandBuffer(uint32_t imageIndex)
     {
         // Reset command buffer
         m_commandBuffers[m_currentFrame].begin({});
 
         // Transition image layout to color attachment
         TransitionImageLayout(
-            imageIndex,
+            m_swapchain->GetImages()[imageIndex],
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eColorAttachmentOptimal,
             {},
@@ -664,7 +871,7 @@ namespace Felina
         m_commandBuffers[m_currentFrame].beginRendering(renderingInfo);
 
         // Bind the graphic pipeline (the attachment will be bound to the fragment shader output)
-        m_commandBuffers[m_currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, m_graphicsPipeline);
+        m_commandBuffers[m_currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, m_fwdPipeline);
 
         // Set viewport and scissor size (dynamic rendering)
         m_commandBuffers[m_currentFrame].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f));
@@ -672,7 +879,7 @@ namespace Felina
 
         // Bind descriptor sets
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics, m_pipelineLayout, 0,
+            vk::PipelineBindPoint::eGraphics, m_fwdPipelineLayout, 0,
             *m_descriptorSets[m_currentFrame], nullptr
         );
         
@@ -685,7 +892,7 @@ namespace Felina
             // Update object index
             PushConstants pc{ i };
             m_commandBuffers[m_currentFrame].pushConstants(
-                *m_pipelineLayout,
+                *m_fwdPipelineLayout,
                 vk::ShaderStageFlagBits::eVertex,
                 0,
                 vk::ArrayProxy<const PushConstants>(1, &pc)
@@ -708,7 +915,7 @@ namespace Felina
 
         // After rendering, transition the swapchain image to PRESENT_SRC
         TransitionImageLayout(
-            imageIndex,
+            m_swapchain->GetImages()[imageIndex],
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::ePresentSrcKHR,
             vk::AccessFlagBits2::eColorAttachmentWrite,
@@ -721,8 +928,203 @@ namespace Felina
         m_commandBuffers[m_currentFrame].end();
     }
 
+    void Renderer::RecordDeferredCommandBuffer(uint32_t imageIndex)
+    {
+        auto& cmdBuf = m_commandBuffers[m_currentFrame];
+        auto& gBuffer = m_gBuffers[m_currentFrame];
+        vk::Extent2D swapchainExtent = m_swapchain->GetExtent();
+
+        cmdBuf.begin({});
+        
+        // ---- Geometry pass ----
+
+        // Transition G-buffer attachments to color attachment layout
+        const GBuffer::Attachment* depthAttachment = nullptr;
+        for (auto& attachment : gBuffer->GetAttachments())
+        {
+            if (attachment.type == GBuffer::AttachmentType::Depth)
+            {
+                depthAttachment = &attachment;
+                continue;
+            }
+                
+            TransitionImageLayout(
+                attachment.image->GetHandle(), vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+                {}, vk::AccessFlagBits2::eColorAttachmentWrite,
+                vk::PipelineStageFlagBits2::eTopOfPipe, vk::PipelineStageFlagBits2::eColorAttachmentOutput
+            );
+        }
+
+        if(depthAttachment == nullptr)
+            throw std::runtime_error("[RENDERER] Couldn't retrieve the G-buffer depth attachment because there's no such attachment!");
+
+        // Transition depth attachment as well
+        TransitionImageLayout(
+            depthAttachment->image->GetHandle(), vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            {}, vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+            vk::PipelineStageFlagBits2::eTopOfPipe, vk::PipelineStageFlagBits2::eEarlyFragmentTests
+        );
+
+        // Setup rendering info (dynamic rendering)
+        // Color attachments rendering info
+        std::vector<vk::RenderingAttachmentInfo> colorAttachmentInfos;
+        for (auto& attachment : gBuffer->GetAttachments())
+        {
+            if (attachment.type == GBuffer::AttachmentType::Depth)
+                continue;
+            colorAttachmentInfos.push_back({
+                .imageView = attachment.image->GetImageView(),
+                .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .loadOp = vk::AttachmentLoadOp::eClear,
+                .storeOp = vk::AttachmentStoreOp::eStore,
+                .clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
+            });
+        }
+        // Depth attachment rendering info
+        vk::RenderingAttachmentInfo depthAttachmentInfo{
+            .imageView = depthAttachment->image->GetImageView(),
+            .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = vk::ClearDepthStencilValue{1.0f, 0} // {depth, stencil} -> 1.0f - far plane
+        };
+        vk::RenderingInfo lightingRenderingInfo = {
+            .renderArea = {.offset = { 0, 0 }, .extent = swapchainExtent},
+            .layerCount = 1,
+            .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentInfos.size()),
+            .pColorAttachments = colorAttachmentInfos.data(),
+            .pDepthAttachment = &depthAttachmentInfo
+        };
+
+        // Begin rendering
+        cmdBuf.beginRendering(lightingRenderingInfo);
+        
+        // Bind the graphic pipeline (the attachment will be bound to the fragment shader output)
+        m_commandBuffers[m_currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, m_defGeometryPipeline);
+
+        // Set viewport and scissor size (dynamic rendering)
+        m_commandBuffers[m_currentFrame].setViewport(
+            0,
+            vk::Viewport(0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f)
+        );
+        m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
+
+        // Bind descriptor sets (global UBO, object SSBO)
+        m_commandBuffers[m_currentFrame].bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics, m_defGeometryPipelineLayout, 0,
+            *m_descriptorSets[m_currentFrame], nullptr
+        );
+
+        // Draw all the objects
+        std::vector<Object*> objects = m_scene.GetObjects();
+        for (uint32_t i = 0; i < objects.size(); i++)
+        {
+            Object* obj = objects[i];
+
+            // Update object index
+            PushConstants pc{ i };
+            m_commandBuffers[m_currentFrame].pushConstants(
+                *m_defGeometryPipelineLayout,
+                vk::ShaderStageFlagBits::eVertex,
+                0,
+                vk::ArrayProxy<const PushConstants>(1, &pc)
+            );
+
+            // Bind vertex and index buffer
+            auto& mesh = obj->GetMesh();
+            m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
+            m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
+
+            // Draw call
+            m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
+        }
+
+        // Draw Dear ImGui
+        DrawImGuiFrame(ImGui::GetDrawData());
+
+        cmdBuf.endRendering();
+    
+        // ---- Lighting pass ----
+
+        // Transition G-buffer attachments to shader read layout for sampling
+        for (auto& attachment : gBuffer->GetAttachments())
+        {
+            TransitionImageLayout(
+                attachment.image->GetHandle(), 
+                attachment.type == GBuffer::AttachmentType::Depth ? vk::ImageLayout::eDepthAttachmentOptimal : vk::ImageLayout::eColorAttachmentOptimal, 
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                {}, 
+                attachment.type == GBuffer::AttachmentType::Depth ? vk::AccessFlagBits2::eDepthStencilAttachmentRead : vk::AccessFlagBits2::eColorAttachmentRead,
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eFragmentShader
+            );
+        }
+
+        // Transition swapchain image to color attachment layout
+        TransitionImageLayout(
+            m_swapchain->GetImages()[imageIndex],
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            {},
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput
+        );
+
+        // Setup rendering info
+        vk::RenderingAttachmentInfo finalAttachmentInfo{
+            .imageView = m_swapchain->GetImageViews()[imageIndex],
+            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
+        };
+        vk::RenderingInfo renderingInfo = {
+            .renderArea = {.offset = { 0, 0 }, .extent = swapchainExtent},
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &finalAttachmentInfo
+        };
+
+        // Rendering (computing lighting)
+        cmdBuf.beginRendering(renderingInfo);
+
+        // Bind the graphic pipeline (the attachment will be bound to the fragment shader output)
+        m_commandBuffers[m_currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, m_defLightingPipeline);
+
+        // Set viewport and scissor size (dynamic rendering)
+        m_commandBuffers[m_currentFrame].setViewport(
+            0,
+            vk::Viewport(0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f)
+        );
+        m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
+
+        // Bind descriptor sets (global UBO, object SSBO)
+        m_commandBuffers[m_currentFrame].bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics, m_defGeometryPipelineLayout, 0,
+            *gBuffer->GetDescriptorSet(), nullptr
+        );
+
+        // Draw a triangle that covers the screen (optimization of a quad)
+        cmdBuf.draw(3, 1, 0, 0);
+
+        cmdBuf.endRendering();
+
+        // After rendering, transition the swapchain image to PRESENT_SRC
+        TransitionImageLayout(
+            m_swapchain->GetImages()[imageIndex],
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::ePresentSrcKHR,
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            {},
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::PipelineStageFlagBits2::eBottomOfPipe
+        );
+
+        cmdBuf.end();
+    }
+
     void Renderer::TransitionImageLayout(
-        uint32_t imageIndex,
+        vk::Image image,
         vk::ImageLayout oldLayout,
         vk::ImageLayout newLayout,
         vk::AccessFlags2 srcAccessMask,
@@ -740,7 +1142,7 @@ namespace Felina
             .newLayout = newLayout,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = m_swapchain->GetImages()[imageIndex],
+            .image = image,
             .subresourceRange = {
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
                 .baseMipLevel = 0,

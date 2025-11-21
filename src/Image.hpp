@@ -18,12 +18,14 @@ namespace Felina
 
 			const vk::Image& GetHandle() const { return m_image; };
 			const vk::raii::ImageView& GetImageView() const { return m_imageView; }
+			const vk::Format GetFormat() const { return m_format; }
 
 		private:
 			void CreateImageView(const Device& device, const vk::ImageCreateInfo& imageInfo);
 
 			const VmaAllocator& m_allocator;
 			vk::Image m_image; // no RAII because of VMA
+			vk::Format m_format;
 			vk::raii::ImageView m_imageView = nullptr;
 			VmaAllocation m_allocation;
 	};

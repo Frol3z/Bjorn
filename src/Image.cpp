@@ -21,6 +21,7 @@ namespace Felina
 			throw std::runtime_error("[IMAGE] vmaCreateImage: " + std::to_string(res));
 
 		m_image = vk::Image(raw);
+		m_format = imageInfo.format;
 
 		// Image View
 		CreateImageView(device, imageInfo);
@@ -41,7 +42,7 @@ namespace Felina
 	{
 		vk::ImageViewCreateInfo imageViewCreateInfo{};
 		imageViewCreateInfo.image = m_image;
-		imageViewCreateInfo.format = imageInfo.format;
+		imageViewCreateInfo.format = m_format;
 
 		// .viewType
 		// NOTE: may be updated/moved if more complex combinations are needed
@@ -75,7 +76,7 @@ namespace Felina
 			aspect |= vk::ImageAspectFlagBits::eDepth;
 			
 			// Add stencil buffer as well if needed
-			if (imageInfo.format == vk::Format::eD32SfloatS8Uint || imageInfo.format == vk::Format::eD24UnormS8Uint)
+			if (m_format == vk::Format::eD32SfloatS8Uint || m_format == vk::Format::eD24UnormS8Uint)
 				aspect |= vk::ImageAspectFlagBits::eStencil;
 		}
 		else

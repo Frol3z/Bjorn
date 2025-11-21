@@ -71,7 +71,8 @@ namespace Felina
 			void CreateGBuffer();
 			void CreateDescriptorSetLayout();
 			void CreatePushConstant();
-			void CreateGraphicsPipeline();
+			void CreateForwardPipeline();
+			void CreateDeferredPipeline();
 			void CreateCommandPool();
 			void CreateCommandBuffer();
 			void CreateUniformBuffers();
@@ -83,9 +84,10 @@ namespace Felina
 			[[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const;
 			static std::vector<char> ReadFile(const std::string& filename);
 
-			void RecordCommandBuffer(uint32_t imageIndex);
+			void RecordForwardCommandBuffer(uint32_t imageIndex);
+			void RecordDeferredCommandBuffer(uint32_t imageIndex);
 			void TransitionImageLayout(
-				uint32_t imageIndex,
+				vk::Image image,
 				vk::ImageLayout oldLayout,
 				vk::ImageLayout newLayout,
 				vk::AccessFlags2 srcAccessMask,
@@ -111,13 +113,20 @@ namespace Felina
 			std::unique_ptr<Swapchain> m_swapchain = nullptr;
 			vk::raii::DescriptorPool m_descriptorPool = nullptr;
 			vk::raii::CommandPool m_commandPool = nullptr;
-			std::unique_ptr<GBuffer> m_gBuffer = nullptr;
+			std::array<std::unique_ptr<GBuffer>, MAX_FRAMES_IN_FLIGHT> m_gBuffers;
 
 			vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
 			vk::PushConstantRange m_pushConstantRange;
 
-			vk::raii::PipelineLayout m_pipelineLayout = nullptr;
-			vk::raii::Pipeline m_graphicsPipeline = nullptr;
+			// Forward rendering
+			vk::raii::PipelineLayout m_fwdPipelineLayout = nullptr;
+			vk::raii::Pipeline m_fwdPipeline = nullptr;
+
+			// Deferred rendering
+			vk::raii::PipelineLayout m_defGeometryPipelineLayout = nullptr;
+			vk::raii::Pipeline m_defGeometryPipeline = nullptr;
+			vk::raii::PipelineLayout m_defLightingPipelineLayout = nullptr;
+			vk::raii::Pipeline m_defLightingPipeline = nullptr;
 
 			std::vector<vk::raii::CommandBuffer> m_commandBuffers;
 
