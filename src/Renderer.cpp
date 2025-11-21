@@ -152,7 +152,7 @@ namespace Felina
         pipelineRenderingCreateInfo.stencilAttachmentFormat = vk::Format::eUndefined;
 
         // Create shader module
-        auto shaderPath = std::filesystem::current_path() / "./shaders/imgui_custom.spv";
+        auto shaderPath = std::filesystem::current_path() / "./shaders/imgui_custom.vert.spv";
         m_imGuiCustomVertShaderCode = ReadFile(shaderPath.string());
         m_imGuiCustomVertShaderModuleCreateInfo = {
             .codeSize = m_imGuiCustomVertShaderCode.size() * sizeof(char),
@@ -359,18 +359,20 @@ namespace Felina
     void Renderer::CreateForwardPipeline()
     {
         // Create shader module
-        auto shaderPath = std::filesystem::current_path() / "./shaders/shader.spv";
-        vk::raii::ShaderModule shaderModule = CreateShaderModule(ReadFile(shaderPath.string()));
+        auto vertShaderPath = std::filesystem::current_path() / "./shaders/forward.vert.spv";
+        auto fragShaderPath = std::filesystem::current_path() / "./shaders/forward.frag.spv";
+        vk::raii::ShaderModule vertShaderModule = CreateShaderModule(ReadFile(vertShaderPath.string()));
+        vk::raii::ShaderModule fragShaderModule = CreateShaderModule(ReadFile(fragShaderPath.string()));
 
         // ShaderStageCreateInfo
         vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eVertex,
-            .module = shaderModule,
+            .module = vertShaderModule,
             .pName = "vertMain"
         };
         vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eFragment,
-            .module = shaderModule,
+            .module = fragShaderModule,
             .pName = "fragMain"
         };
         vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
