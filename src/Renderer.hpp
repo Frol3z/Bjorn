@@ -88,6 +88,7 @@ namespace Felina
 			void RecordDeferredCommandBuffer(uint32_t imageIndex);
 			void TransitionImageLayout(
 				vk::Image image,
+				vk::Format imageFormat,
 				vk::ImageLayout oldLayout,
 				vk::ImageLayout newLayout,
 				vk::AccessFlags2 srcAccessMask,

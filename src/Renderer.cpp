@@ -96,7 +96,8 @@ namespace Felina
 
         // Record command buffer and reset draw fence
         m_device->GetDevice().resetFences(*m_inFlightFences[m_currentFrame]);
-        RecordForwardCommandBuffer(imageIndex);
+        //RecordForwardCommandBuffer(imageIndex);
+        RecordDeferredCommandBuffer(imageIndex);
 
         // Submit commands to the queue
         vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -368,12 +369,12 @@ namespace Felina
         vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eVertex,
             .module = vertShaderModule,
-            .pName = "vertMain"
+            .pName = "main"
         };
         vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eFragment,
             .module = fragShaderModule,
-            .pName = "fragMain"
+            .pName = "main"
         };
         vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
@@ -484,8 +485,8 @@ namespace Felina
 
         // Create shader module
         // TODO: use deferred shader
-        auto vertShaderPath = std::filesystem::current_path() / "./shaders/forward.vert.spv";
-        auto fragShaderPath = std::filesystem::current_path() / "./shaders/forward.frag.spv";
+        auto vertShaderPath = std::filesystem::current_path() / "./shaders/deferred_geometry.vert.spv";
+        auto fragShaderPath = std::filesystem::current_path() / "./shaders/deferred_geometry.frag.spv";
         vk::raii::ShaderModule vertShaderModule = CreateShaderModule(ReadFile(vertShaderPath.string()));
         vk::raii::ShaderModule fragShaderModule = CreateShaderModule(ReadFile(fragShaderPath.string()));
 
@@ -493,12 +494,12 @@ namespace Felina
         vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eVertex,
             .module = vertShaderModule,
-            .pName = "vertMain"
+            .pName = "main"
         };
         vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eFragment,
             .module = fragShaderModule,
-            .pName = "fragMain"
+            .pName = "main"
         };
         vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
@@ -608,8 +609,8 @@ namespace Felina
         // ---- LIGHTING PASS ----
 
         // Create shader module
-        auto lightingVertShaderPath = std::filesystem::current_path() / "./shaders/forward.vert.spv";
-        auto lightingFragShaderPath = std::filesystem::current_path() / "./shaders/forward.frag.spv";
+        auto lightingVertShaderPath = std::filesystem::current_path() / "./shaders/deferred_lighting.vert.spv";
+        auto lightingFragShaderPath = std::filesystem::current_path() / "./shaders/deferred_lighting.frag.spv";
         vk::raii::ShaderModule lightingVertShaderModule = CreateShaderModule(ReadFile(lightingVertShaderPath.string()));
         vk::raii::ShaderModule lightingFragShaderModule = CreateShaderModule(ReadFile(lightingFragShaderPath.string()));
 
@@ -617,18 +618,29 @@ namespace Felina
         vk::PipelineShaderStageCreateInfo lightingVertShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eVertex,
             .module = lightingVertShaderModule,
-            .pName = "vertMain"
+            .pName = "main"
         };
         vk::PipelineShaderStageCreateInfo lightingFragShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eFragment,
             .module = lightingFragShaderModule,
-            .pName = "fragMain"
+            .pName = "main"
         };
         vk::PipelineShaderStageCreateInfo lightingShaderStages[] = { lightingVertShaderStageInfo, lightingFragShaderStageInfo };
 
         // VertexInput (empty)
         // NOTE: a full screen quad will we drawn at draw time
         vk::PipelineVertexInputStateCreateInfo lightingVertexInputInfo{};
+
+        vk::PipelineRasterizationStateCreateInfo lightingRasterizer {
+            .depthClampEnable = vk::False, // Clamp out of bound depth values to the near or far plane
+            .rasterizerDiscardEnable = vk::False, // Disable rasterization (no output)
+            .polygonMode = vk::PolygonMode::eFill, // For wireframe mode a GPU feature must be enabled
+            .cullMode = vk::CullModeFlagBits::eNone, // !!! Disable back face culling for fullscreen triangle
+            .frontFace = vk::FrontFace::eCounterClockwise,
+            .depthBiasEnable = vk::False,
+            .depthBiasSlopeFactor = 1.0f,
+            .lineWidth = 1.0f
+        };
 
         // Color blending (disabled)
         vk::PipelineColorBlendAttachmentState lightingColorBlendAttachment{
@@ -667,14 +679,14 @@ namespace Felina
             .pVertexInputState = &lightingVertexInputInfo,
             .pInputAssemblyState = &inputAssembly,
             .pViewportState = &viewportState,
-            .pRasterizationState = &rasterizer,
+            .pRasterizationState = &lightingRasterizer,
             .pMultisampleState = &multisampling,
             .pColorBlendState = &lightingColorBlending,
             .pDynamicState = &dynamicState,
             .layout = m_defLightingPipelineLayout,
             .renderPass = nullptr // Because we are using dynamic rendering
         };
-        m_defLightingPipeline = vk::raii::Pipeline(m_device->GetDevice(), nullptr, pipelineInfo);
+        m_defLightingPipeline = vk::raii::Pipeline(m_device->GetDevice(), nullptr, lightingPipelineInfo);
     }
 
     vk::raii::ShaderModule Renderer::CreateShaderModule(const std::vector<char>& code) const
@@ -847,6 +859,7 @@ namespace Felina
         // Transition image layout to color attachment
         TransitionImageLayout(
             m_swapchain->GetImages()[imageIndex],
+            m_swapchain->GetSurfaceFormat().format,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eColorAttachmentOptimal,
             {},
@@ -923,6 +936,7 @@ namespace Felina
         // After rendering, transition the swapchain image to PRESENT_SRC
         TransitionImageLayout(
             m_swapchain->GetImages()[imageIndex],
+            m_swapchain->GetSurfaceFormat().format,
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::ePresentSrcKHR,
             vk::AccessFlagBits2::eColorAttachmentWrite,
@@ -956,7 +970,8 @@ namespace Felina
             }
                 
             TransitionImageLayout(
-                attachment.image->GetHandle(), vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+                attachment.image->GetHandle(), attachment.image->GetFormat(),
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
                 {}, vk::AccessFlagBits2::eColorAttachmentWrite,
                 vk::PipelineStageFlagBits2::eTopOfPipe, vk::PipelineStageFlagBits2::eColorAttachmentOutput
             );
@@ -967,7 +982,8 @@ namespace Felina
 
         // Transition depth attachment as well
         TransitionImageLayout(
-            depthAttachment->image->GetHandle(), vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            depthAttachment->image->GetHandle(), depthAttachment->image->GetFormat(),
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
             {}, vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
             vk::PipelineStageFlagBits2::eTopOfPipe, vk::PipelineStageFlagBits2::eEarlyFragmentTests
         );
@@ -995,7 +1011,7 @@ namespace Felina
             .storeOp = vk::AttachmentStoreOp::eStore,
             .clearValue = vk::ClearDepthStencilValue{1.0f, 0} // {depth, stencil} -> 1.0f - far plane
         };
-        vk::RenderingInfo lightingRenderingInfo = {
+        vk::RenderingInfo renderingInfo = {
             .renderArea = {.offset = { 0, 0 }, .extent = swapchainExtent},
             .layerCount = 1,
             .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentInfos.size()),
@@ -1004,7 +1020,7 @@ namespace Felina
         };
 
         // Begin rendering
-        cmdBuf.beginRendering(lightingRenderingInfo);
+        cmdBuf.beginRendering(renderingInfo);
         
         // Bind the graphic pipeline (the attachment will be bound to the fragment shader output)
         m_commandBuffers[m_currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, m_defGeometryPipeline);
@@ -1046,29 +1062,29 @@ namespace Felina
             m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
         }
 
-        // Draw Dear ImGui
-        DrawImGuiFrame(ImGui::GetDrawData());
-
         cmdBuf.endRendering();
     
         // ---- Lighting pass ----
-
+        
         // Transition G-buffer attachments to shader read layout for sampling
         for (auto& attachment : gBuffer->GetAttachments())
         {
             TransitionImageLayout(
-                attachment.image->GetHandle(), 
+                attachment.image->GetHandle(),
+                attachment.image->GetFormat(),
                 attachment.type == GBuffer::AttachmentType::Depth ? vk::ImageLayout::eDepthAttachmentOptimal : vk::ImageLayout::eColorAttachmentOptimal, 
                 vk::ImageLayout::eShaderReadOnlyOptimal,
-                {}, 
+                attachment.type == GBuffer::AttachmentType::Depth ? vk::AccessFlagBits2::eDepthStencilAttachmentWrite : vk::AccessFlagBits2::eColorAttachmentWrite,
                 attachment.type == GBuffer::AttachmentType::Depth ? vk::AccessFlagBits2::eDepthStencilAttachmentRead : vk::AccessFlagBits2::eColorAttachmentRead,
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eFragmentShader
+                attachment.type == GBuffer::AttachmentType::Depth ? vk::PipelineStageFlagBits2::eEarlyFragmentTests : vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                vk::PipelineStageFlagBits2::eFragmentShader
             );
         }
 
         // Transition swapchain image to color attachment layout
         TransitionImageLayout(
             m_swapchain->GetImages()[imageIndex],
+            m_swapchain->GetSurfaceFormat().format,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eColorAttachmentOptimal,
             {},
@@ -1085,7 +1101,7 @@ namespace Felina
             .storeOp = vk::AttachmentStoreOp::eStore,
             .clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
         };
-        vk::RenderingInfo renderingInfo = {
+        vk::RenderingInfo lightingRenderingInfo = {
             .renderArea = {.offset = { 0, 0 }, .extent = swapchainExtent},
             .layerCount = 1,
             .colorAttachmentCount = 1,
@@ -1093,7 +1109,7 @@ namespace Felina
         };
 
         // Rendering (computing lighting)
-        cmdBuf.beginRendering(renderingInfo);
+        cmdBuf.beginRendering(lightingRenderingInfo);
 
         // Bind the graphic pipeline (the attachment will be bound to the fragment shader output)
         m_commandBuffers[m_currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, m_defLightingPipeline);
@@ -1107,18 +1123,22 @@ namespace Felina
 
         // Bind descriptor sets (global UBO, object SSBO)
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics, m_defGeometryPipelineLayout, 0,
+            vk::PipelineBindPoint::eGraphics, m_defLightingPipelineLayout, 0,
             *gBuffer->GetDescriptorSet(), nullptr
         );
 
         // Draw a triangle that covers the screen (optimization of a quad)
         cmdBuf.draw(3, 1, 0, 0);
 
+        // Draw Dear ImGui
+        DrawImGuiFrame(ImGui::GetDrawData());
+
         cmdBuf.endRendering();
 
         // After rendering, transition the swapchain image to PRESENT_SRC
         TransitionImageLayout(
             m_swapchain->GetImages()[imageIndex],
+            m_swapchain->GetSurfaceFormat().format,
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::ePresentSrcKHR,
             vk::AccessFlagBits2::eColorAttachmentWrite,
@@ -1132,6 +1152,7 @@ namespace Felina
 
     void Renderer::TransitionImageLayout(
         vk::Image image,
+        vk::Format imageFormat,
         vk::ImageLayout oldLayout,
         vk::ImageLayout newLayout,
         vk::AccessFlags2 srcAccessMask,
@@ -1140,6 +1161,25 @@ namespace Felina
         vk::PipelineStageFlags2 dstStageMask
     )
     {
+        // Infer aspect from the image format
+        // TODO: implement appropriate function
+        vk::ImageAspectFlags aspect{};
+        switch (imageFormat)
+        {
+        case vk::Format::eD16Unorm:
+        case vk::Format::eD32Sfloat:
+            aspect = vk::ImageAspectFlagBits::eDepth;
+            break;
+        case vk::Format::eD24UnormS8Uint:
+        case vk::Format::eD32SfloatS8Uint:
+            aspect = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+            break;
+        default:
+            aspect = vk::ImageAspectFlagBits::eColor;
+            break;
+        }
+
+        // Create and submit barrier
         vk::ImageMemoryBarrier2 barrier = {
             .srcStageMask = srcStageMask,
             .srcAccessMask = srcAccessMask,
@@ -1151,7 +1191,7 @@ namespace Felina
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = image,
             .subresourceRange = {
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .aspectMask = aspect,
                 .baseMipLevel = 0,
                 .levelCount = 1,
                 .baseArrayLayer = 0,

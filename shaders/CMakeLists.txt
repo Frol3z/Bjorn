@@ -32,37 +32,43 @@ add_custom_command(
 set(COMPILED_SHADERS ${IMGUI_VERT_SPV})
 foreach(SRC ${SHADER_SOURCES})
     get_filename_component(SRC_NAME ${SRC} NAME_WE)
+    get_filename_component(SRC_EXT ${SRC} EXT)
 
     set(VERT_OUT ${OUTPUT_DIR}/${SRC_NAME}.vert.spv)
     set(FRAG_OUT ${OUTPUT_DIR}/${SRC_NAME}.frag.spv)
 
-    # Vertex shader
-    add_custom_command(
-        OUTPUT ${VERT_OUT}
-        COMMAND ${DXC_EXECUTABLE} ${SRC}
-                -spirv
-                -T vs_6_0
-                -E vertMain
-                -Fo ${VERT_OUT}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        DEPENDS ${SRC}
-        COMMENT "Compiling vertex shader into ${VERT_OUT}.."
-        VERBATIM
-    )
-
-    # Fragment shader
-    add_custom_command(
-        OUTPUT ${FRAG_OUT}
-        COMMAND ${DXC_EXECUTABLE} ${SRC}
-                -spirv
-                -T ps_6_0
-                -E fragMain
-                -Fo ${FRAG_OUT}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        DEPENDS ${SRC}
-        COMMENT "Compiling fragment shader into ${FRAG_OUT}.."
-        VERBATIM
-    )
+    if(SRC_EXT STREQUAL ".vert.hlsl")
+        # Vertex shader
+        add_custom_command(
+            OUTPUT ${VERT_OUT}
+            COMMAND ${DXC_EXECUTABLE} ${SRC}
+                    -spirv
+                    -T vs_6_0
+                    -E main
+                    -Fo ${VERT_OUT}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            DEPENDS ${SRC}
+            COMMENT "Compiling vertex shader into ${VERT_OUT}.."
+            VERBATIM
+        )
+    elseif(SRC_EXT STREQUAL ".frag.hlsl")
+        # Fragment shader
+        add_custom_command(
+            OUTPUT ${FRAG_OUT}
+            COMMAND ${DXC_EXECUTABLE} ${SRC}
+                    -spirv
+                    -T ps_6_0
+                    -E main
+                    -Fo ${FRAG_OUT}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            DEPENDS ${SRC}
+            COMMENT "Compiling fragment shader into ${FRAG_OUT}.."
+            VERBATIM
+        )
+    else()
+        message(WARNING "Unknown shader extension: ${SRC}, skipping compilation") 
+        continue() 
+    endif()
 
     list(APPEND COMPILED_SHADERS ${VERT_OUT} ${FRAG_OUT})
 endforeach()
