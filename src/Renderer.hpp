@@ -29,25 +29,29 @@ namespace Felina
 	class Scene;
 	class Mesh;
 
-	struct GlobalUBO
-	{
-		glm::mat4 view;
-		glm::mat4 proj;
-	};
-
-	struct ObjectData
-	{
-		glm::mat4 model;
-		// may be extended in the future
-	};
-
-	struct PushConstants
-	{
-		uint32_t objectIndex;
-	};
 
 	class Renderer
 	{
+		public:
+			// TODO: allow swapping mode on the fly/choosing at startup
+			enum RenderMode { FORWARD = 0, DEFERRED };
+			struct GlobalUBO
+			{
+				glm::mat4 view;
+				glm::mat4 proj;
+			};
+
+			struct ObjectData
+			{
+				glm::mat4 model;
+				// may be extended in the future
+			};
+
+			struct PushConstants
+			{
+				uint32_t objectIndex;
+			};
+
 		public:
 			Renderer(Application& app, const Window& window, const Scene& scene);
 			~Renderer();
@@ -79,10 +83,6 @@ namespace Felina
 			void CreateDescriptorPool();
 			void CreateDescriptorSets();
 			void CreateSyncObjects();
-
-			// TODO: will be moved to the Material system
-			[[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const;
-			static std::vector<char> ReadFile(const std::string& filename);
 
 			void RecordForwardCommandBuffer(uint32_t imageIndex);
 			void RecordDeferredCommandBuffer(uint32_t imageIndex);
