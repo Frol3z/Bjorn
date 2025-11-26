@@ -53,7 +53,7 @@ cmake ..
 6. Build and run the project.
 
 # Class diagram
-![Felina](https://github.com/user-attachments/assets/b19c5727-a0b8-480a-9816-a3992fd6236d)
+![Diagram](diagram.png)
 
 # Examples
 
