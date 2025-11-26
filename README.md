@@ -1,6 +1,6 @@
 # Felina
 
-<img width="1280" height="720" alt="Felina" src="https://github.com/user-attachments/assets/9be41d49-08fc-422c-86ff-bcd861f5a675" />
+![Renderer](rendering.png)
 
 Felina is a Vulkan renderer written in C++.
 
@@ -9,12 +9,14 @@ it has since evolved into a small (relatively speaking) framework which is activ
 Its purpose is to provide a space for experimenting on topics such as real time rendering and game development.
 
 # Features
-
+- simple user interface
+- full deferred rendering pipeline
 # Roadmap
 ## Short term
-- deferred rendering
-- material system
-- basic lighting
+- material system and texture support
+- directional and point light support
+- improved UX
+- model loading
 ## Long term
 - PBR materials
 - cascaded shadow maps
@@ -56,7 +58,14 @@ cmake ..
 # Examples
 
 # References
+
+## General
 https://docs.vulkan.org/tutorial/latest/00_Introduction.html
 https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html
 https://www.learncpp.com/
 https://www.realtimerendering.com/
+https://docs.vulkan.org/guide/latest/hlsl.html
+
+## On specific topics
+https://developer.nvidia.com/vulkan-memory-management
+https://wallisc.github.io/rendering/2021/04/18/Fullscreen-Pass.html
