@@ -12,7 +12,7 @@ namespace Felina
 	struct Vertex
 	{
 		glm::vec3 pos;
-		glm::vec3 color;
+		glm::vec3 normal;
 
 		static vk::VertexInputBindingDescription GetBindingDescription()
 		{
@@ -24,7 +24,7 @@ namespace Felina
 			return
 			{
 				vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, pos)),
-				vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color))
+				vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal))
 			};
 		}
 	};

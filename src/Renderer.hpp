@@ -10,15 +10,6 @@ struct ImDrawData;
 
 namespace Felina
 {
-	// NOTE: 
-	// for a greater number of concurrent frames
-	// the CPU might get ahead of the GPU causing latency
-	// between frames
-	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-
-	// Max number of drawable objects
-	constexpr uint32_t MAX_OBJECTS = 100;
-
 	// Fwd declaration
 	class Application;
 	class Device;
@@ -29,28 +20,41 @@ namespace Felina
 	class Scene;
 	class Mesh;
 
-
 	class Renderer
 	{
 		public:
-			// TODO: allow swapping mode on the fly/choosing at startup
-			enum RenderMode { FORWARD = 0, DEFERRED };
-			struct GlobalUBO
+			struct CameraData
 			{
 				glm::mat4 view;
 				glm::mat4 proj;
+				glm::mat4 invViewProj;
 			};
 
 			struct ObjectData
 			{
 				glm::mat4 model;
-				// may be extended in the future
+				glm::mat3 normal;
 			};
 
-			struct PushConstants
+			struct ObjectPushConst
 			{
 				uint32_t objectIndex;
 			};
+
+			// NOTE: for a greater number of concurrent frames
+			// the CPU might get ahead of the GPU causing latency
+			// between frames
+			static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
+			// Max number of drawable objects
+			static constexpr uint32_t MAX_OBJECTS = 100;
+
+			// Max number of descriptor sets PER FRAME
+			// Current sets:
+			// - camera UBO
+			// - object SSBO
+			// - GBuffer (see GBuffer class)
+			static constexpr uint32_t MAX_DESCRIPTOR_SETS = 3;
 
 		public:
 			Renderer(Application& app, const Window& window, const Scene& scene);
@@ -73,10 +77,9 @@ namespace Felina
 			void CreateDevice();
 			void CreateSwapchain();
 			void CreateGBuffer();
-			void CreateDescriptorSetLayout();
+			void CreateDescriptorSetLayouts();
 			void CreatePushConstant();
-			void CreateForwardPipeline();
-			void CreateDeferredPipeline();
+			void CreatePipeline();
 			void CreateCommandPool();
 			void CreateCommandBuffer();
 			void CreateUniformBuffers();
@@ -84,8 +87,7 @@ namespace Felina
 			void CreateDescriptorSets();
 			void CreateSyncObjects();
 
-			void RecordForwardCommandBuffer(uint32_t imageIndex);
-			void RecordDeferredCommandBuffer(uint32_t imageIndex);
+			void RecordCommandBuffer(uint32_t imageIndex);
 			void TransitionImageLayout(
 				vk::Image image,
 				vk::Format imageFormat,
@@ -116,14 +118,10 @@ namespace Felina
 			vk::raii::CommandPool m_commandPool = nullptr;
 			std::array<std::unique_ptr<GBuffer>, MAX_FRAMES_IN_FLIGHT> m_gBuffers;
 
-			vk::raii::DescriptorSetLayout m_descriptorSetLayout = nullptr;
-			vk::PushConstantRange m_pushConstantRange;
+			vk::raii::DescriptorSetLayout m_cameraSetLayout = nullptr;
+			vk::raii::DescriptorSetLayout m_objectSetLayout = nullptr;
+			vk::PushConstantRange m_objectPushConst;
 
-			// Forward rendering
-			vk::raii::PipelineLayout m_fwdPipelineLayout = nullptr;
-			vk::raii::Pipeline m_fwdPipeline = nullptr;
-
-			// Deferred rendering
 			vk::raii::PipelineLayout m_defGeometryPipelineLayout = nullptr;
 			vk::raii::Pipeline m_defGeometryPipeline = nullptr;
 			vk::raii::PipelineLayout m_defLightingPipelineLayout = nullptr;
@@ -131,9 +129,10 @@ namespace Felina
 
 			std::vector<vk::raii::CommandBuffer> m_commandBuffers;
 
-			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_globalUBOs;
+			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_cameraUBOs;
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;
-			std::vector<vk::raii::DescriptorSet> m_descriptorSets;
+			std::vector<vk::raii::DescriptorSet> m_cameraDescriptorSets;
+			std::vector<vk::raii::DescriptorSet> m_objectDescriptorSets;
 
 			std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
 			std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;

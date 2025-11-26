@@ -44,10 +44,9 @@ namespace Felina
         CreateSwapchain();
         CreateDescriptorPool();
         CreateGBuffer();
-        CreateDescriptorSetLayout();
+        CreateDescriptorSetLayouts();
         CreatePushConstant();
-        CreateForwardPipeline();
-        CreateDeferredPipeline();
+        CreatePipeline();
         CreateCommandPool();
         CreateCommandBuffer();
         CreateUniformBuffers();
@@ -58,7 +57,7 @@ namespace Felina
     Renderer::~Renderer()
     {
         // Destroying buffers explicitly before freeing up memory
-        for (auto& buffer : m_globalUBOs) {
+        for (auto& buffer : m_cameraUBOs) {
             buffer.reset();
         }
         for (auto& buffer : m_objectSSBOs) {
@@ -97,8 +96,7 @@ namespace Felina
 
         // Record command buffer and reset draw fence
         m_device->GetDevice().resetFences(*m_inFlightFences[m_currentFrame]);
-        //RecordForwardCommandBuffer(imageIndex);
-        RecordDeferredCommandBuffer(imageIndex);
+        RecordCommandBuffer(imageIndex);
 
         // Submit commands to the queue
         vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -190,10 +188,11 @@ namespace Felina
     void Renderer::UpdateFrameData()
     {   
         // Update the global uniform buffer
-        GlobalUBO globalUBO{};
+        CameraData globalUBO{};
         globalUBO.view = m_scene.GetCamera().GetViewMatrix();
         globalUBO.proj = m_scene.GetCamera().GetProjectionMatrix();
-        m_globalUBOs[m_currentFrame]->LoadData(&globalUBO, sizeof(globalUBO));
+        globalUBO.invViewProj = m_scene.GetCamera().GetInvViewProj();
+        m_cameraUBOs[m_currentFrame]->LoadData(&globalUBO, sizeof(globalUBO));
 
         // Fill the object data storage buffer
         std::vector<Object*> objects = m_scene.GetObjects();
@@ -202,6 +201,8 @@ namespace Felina
         {
             ObjectData data{};
             data.model = obj->GetModelMatrix();
+            // TODO: avoid recomputing the normal matrix each frame when it's not mandatory (inverse computation)
+            data.normal = obj->GetNormalMatrix();
             objectDatas.push_back(data);
         }
         m_objectSSBOs[m_currentFrame]->LoadData(objectDatas.data(), objectDatas.size() * sizeof(ObjectData));
@@ -327,64 +328,47 @@ namespace Felina
         }
     }
 
-    void Renderer::CreateDescriptorSetLayout()
+    void Renderer::CreateDescriptorSetLayouts()
     {
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
-        
-        // Binding 0 -> global UBO
-        bindings[0] = vk::DescriptorSetLayoutBinding {
-            0, vk::DescriptorType::eUniformBuffer, 1,
-            vk::ShaderStageFlagBits::eVertex, nullptr
+        // Camera set layout
+        // Binding 0 -> CameraData
+        vk::DescriptorSetLayoutBinding cameraBinding {
+            .binding = 0, 
+            .descriptorType = vk::DescriptorType::eUniformBuffer, 
+            .descriptorCount = 1,
+            .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 
+            .pImmutableSamplers = nullptr
         };
+        vk::DescriptorSetLayoutCreateInfo cameraLayout{
+            .bindingCount = 1,
+            .pBindings = &cameraBinding
+        };
+        m_cameraSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), cameraLayout);
 
-        // Binding 1 -> object SSBO
-        bindings[1] = vk::DescriptorSetLayoutBinding{
-            1, vk::DescriptorType::eStorageBuffer, 1,
-            vk::ShaderStageFlagBits::eVertex, nullptr
+        // Object set layout
+        // Binding 0 -> ObjectData
+        vk::DescriptorSetLayoutBinding objectBinding{
+            .binding = 0,
+            .descriptorType = vk::DescriptorType::eStorageBuffer,
+            .descriptorCount = 1,
+            .stageFlags = vk::ShaderStageFlagBits::eVertex,
+            .pImmutableSamplers = nullptr
         };
-
-        // Create descriptor set layout
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{
-            .bindingCount = static_cast<uint32_t>(bindings.size()),
-            .pBindings = bindings.data()
+        vk::DescriptorSetLayoutCreateInfo objectLayout{
+            .bindingCount = 1,
+            .pBindings = &objectBinding
         };
-        m_descriptorSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), layoutInfo);
+        m_objectSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), objectLayout);
     }
 
     void Renderer::CreatePushConstant()
     {
-        m_pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex;
-        m_pushConstantRange.offset = 0;
-        m_pushConstantRange.size = sizeof(PushConstants);
+        m_objectPushConst.stageFlags = vk::ShaderStageFlagBits::eVertex;
+        m_objectPushConst.offset = 0;
+        m_objectPushConst.size = sizeof(ObjectPushConst);
     }
 
-    void Renderer::CreateForwardPipeline()
-    {
-        // TODO: improve the way shader path are handled
-
-        PipelineBuilder pipelineBuilder{ *m_device };
-        std::vector<PipelineBuilder::ShaderStageInfo> shaderStages{
-            {"./shaders/forward.vert.spv", vk::ShaderStageFlagBits::eVertex},
-            {"./shaders/forward.frag.spv", vk::ShaderStageFlagBits::eFragment}
-        };
-        pipelineBuilder.SetShaderStages(shaderStages);
-        pipelineBuilder.EnableVertexInput();
-        pipelineBuilder.DisableDepthTest();
-        pipelineBuilder.EnableBackfaceCulling();
-        pipelineBuilder.SetColorBlending(1); // 1 attachment -> swapchain image
-        
-        std::vector<vk::DescriptorSetLayout> layouts{ m_descriptorSetLayout };
-        std::vector<vk::PushConstantRange> ranges{ m_pushConstantRange };
-        pipelineBuilder.SetPipelineLayout(layouts, ranges);
-        
-        pipelineBuilder.SetAttachmentsFormat(std::vector<vk::Format>{ m_swapchain->GetSurfaceFormat().format }, vk::Format::eUndefined); // no depth attachment
-        
-        auto [pipeline, pipelineLayout] = pipelineBuilder.BuildPipeline();
-        m_fwdPipeline = std::move(pipeline);
-        m_fwdPipelineLayout = std::move(pipelineLayout);
-    }
-
-    void Renderer::CreateDeferredPipeline()
+    void Renderer::CreatePipeline()
     {
         auto& gBuffer = m_gBuffers[0];
 
@@ -394,14 +378,14 @@ namespace Felina
         pipelineBuilder.EnableDepthTest();
         pipelineBuilder.EnableBackfaceCulling();
         std::vector<PipelineBuilder::ShaderStageInfo> geomShaderStages{
-            {"./shaders/deferred_geometry.vert.spv", vk::ShaderStageFlagBits::eVertex},
-            {"./shaders/deferred_geometry.frag.spv", vk::ShaderStageFlagBits::eFragment}
+            {"./shaders/geometry_pass.vert.spv", vk::ShaderStageFlagBits::eVertex},
+            {"./shaders/geometry_pass.frag.spv", vk::ShaderStageFlagBits::eFragment}
         };
         pipelineBuilder.SetShaderStages(geomShaderStages);
         pipelineBuilder.SetColorBlending(static_cast<uint32_t>(gBuffer->GetAttachmentsCount() - 1)); // Depth attachment doesn't need blending!
 
-        std::vector<vk::DescriptorSetLayout> layouts{ m_descriptorSetLayout };
-        std::vector<vk::PushConstantRange> ranges{ m_pushConstantRange };
+        std::vector<vk::DescriptorSetLayout> layouts{ m_cameraSetLayout, m_objectSetLayout };
+        std::vector<vk::PushConstantRange> ranges{ m_objectPushConst };
         pipelineBuilder.SetPipelineLayout(layouts, ranges);
         pipelineBuilder.SetAttachmentsFormat(gBuffer->GetColorAttachmentFormats(), gBuffer->GetDepthFormat());
 
@@ -412,8 +396,8 @@ namespace Felina
         // ---- LIGHTING PASS ----
         pipelineBuilder.Reset();
         std::vector<PipelineBuilder::ShaderStageInfo> lightShaderStages{
-            {"./shaders/deferred_lighting.vert.spv", vk::ShaderStageFlagBits::eVertex},
-            {"./shaders/deferred_lighting.frag.spv", vk::ShaderStageFlagBits::eFragment}
+            {"./shaders/lighting_pass.vert.spv", vk::ShaderStageFlagBits::eVertex},
+            {"./shaders/lighting_pass.frag.spv", vk::ShaderStageFlagBits::eFragment}
         };
         pipelineBuilder.SetShaderStages(lightShaderStages);
         pipelineBuilder.DisableVertexInput();
@@ -421,7 +405,7 @@ namespace Felina
         pipelineBuilder.DisableBackfaceCulling(); // To avoid culling the fullscreen triangle
         pipelineBuilder.SetColorBlending(1); // 1 attachment -> swapchain image
         pipelineBuilder.SetPipelineLayout(
-            std::vector<vk::DescriptorSetLayout>{ gBuffer->GetDescriptorSetLayout() },
+            std::vector<vk::DescriptorSetLayout>{ m_cameraSetLayout, gBuffer->GetDescriptorSetLayout() },
             std::vector<vk::PushConstantRange>{}
         );
         pipelineBuilder.SetAttachmentsFormat(std::vector<vk::Format>{ m_swapchain->GetSurfaceFormat().format }, vk::Format::eUndefined); // no depth attachment
@@ -458,11 +442,11 @@ namespace Felina
         {
             // Global uniform buffer creation
             vk::BufferCreateInfo uboInfo{};
-            uboInfo.size = sizeof(GlobalUBO);
+            uboInfo.size = sizeof(CameraData);
             uboInfo.usage = vk::BufferUsageFlagBits::eUniformBuffer;
             VmaAllocationCreateInfo uboAllocInfo{};
             uboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-            m_globalUBOs[i] = std::make_unique<Buffer>(m_device->GetAllocator(), uboInfo, uboAllocInfo, true);
+            m_cameraUBOs[i] = std::make_unique<Buffer>(m_device->GetAllocator(), uboInfo, uboAllocInfo, true);
 
             // Object data storage buffer creation
             vk::BufferCreateInfo ssboInfo{};
@@ -476,7 +460,9 @@ namespace Felina
 
     void Renderer::CreateDescriptorPool()
     {
-        // TODO: remove hardcoded max number of combined sampler
+        // TODO: remove hardcoded number of attachments
+        // NOTE: the pool is created before the G-buffer because it
+        // uses the pool to allocate the attachments sets
         uint32_t attachmentsCount = 4 * MAX_FRAMES_IN_FLIGHT;
         std::array<vk::DescriptorPoolSize, 3> poolSizes {
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
@@ -486,16 +472,9 @@ namespace Felina
                 .descriptorCount = attachmentsCount
             }
         };
-
-        // NOTE:
-        // Current sets:
-        // - global UBO and SSBO set (see below)
-        // - GBuffer (see GBuffer class)
-        // Multiplied by MAX_FRAMES_IN_FLIGHT
-
         vk::DescriptorPoolCreateInfo poolInfo{
             .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            .maxSets = MAX_FRAMES_IN_FLIGHT * 2, // TODO: remove hardcoded number of sets
+            .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_DESCRIPTOR_SETS,
             .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
             .pPoolSizes = poolSizes.data()
         };
@@ -504,53 +483,61 @@ namespace Felina
 
     void Renderer::CreateDescriptorSets()
     {
-        // Descriptor sets allocation
-        std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_descriptorSetLayout);
-        vk::DescriptorSetAllocateInfo allocInfo{
-            .descriptorPool = m_descriptorPool,
-            .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
-            .pSetLayouts = layouts.data()
-        };
-        m_descriptorSets = m_device->GetDevice().allocateDescriptorSets(allocInfo);
+        // Descriptor sets allocation from the main pool
+        {
+            // Camera descriptor sets allocation
+            std::vector<vk::DescriptorSetLayout> cameraLayouts(MAX_FRAMES_IN_FLIGHT, m_cameraSetLayout);
+            vk::DescriptorSetAllocateInfo cameraAllocInfo{
+                .descriptorPool = m_descriptorPool,
+                .descriptorSetCount = static_cast<uint32_t>(cameraLayouts.size()),
+                .pSetLayouts = cameraLayouts.data()
+            };
+            m_cameraDescriptorSets = m_device->GetDevice().allocateDescriptorSets(cameraAllocInfo);
 
-        // Bind the actual buffers to the descriptor sets
+            // Camera descriptor sets allocation
+            std::vector<vk::DescriptorSetLayout> objectLayouts(MAX_FRAMES_IN_FLIGHT, m_objectSetLayout);
+            vk::DescriptorSetAllocateInfo objectAllocInfo{
+                .descriptorPool = m_descriptorPool,
+                .descriptorSetCount = static_cast<uint32_t>(objectLayouts.size()),
+                .pSetLayouts = objectLayouts.data()
+            };
+            m_objectDescriptorSets = m_device->GetDevice().allocateDescriptorSets(objectAllocInfo);
+        }
+        
+        // Bind the buffers to the corresponding set
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            vk::DescriptorBufferInfo globalUBOInfo{
-                .buffer = m_globalUBOs[i]->GetHandle(),
+            // Camera descriptor set
+            vk::DescriptorBufferInfo cameraUBOInfo{
+                .buffer = m_cameraUBOs[i]->GetHandle(),
                 .offset = 0,
-                .range = sizeof(GlobalUBO)
+                .range = sizeof(CameraData)
             };
+            vk::WriteDescriptorSet cameraWrite{
+                .dstSet = m_cameraDescriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eUniformBuffer,
+                .pBufferInfo = &cameraUBOInfo
+            };
+            m_device->GetDevice().updateDescriptorSets(cameraWrite, {});
+            
+            // Object descriptor set
             vk::DescriptorBufferInfo objectSSBOInfo{
                 .buffer = m_objectSSBOs[i]->GetHandle(),
                 .offset = 0,
                 .range = sizeof(ObjectData) * MAX_OBJECTS
             };
-
-            constexpr size_t bindingsCount = 2;
-            std::array<vk::WriteDescriptorSet, bindingsCount> descriptorWrites{};
-
-            // Binding 0 -> Global UBO
-            descriptorWrites[0] = vk::WriteDescriptorSet {
-                .dstSet = m_descriptorSets[i],
+            vk::WriteDescriptorSet objectWrite{
+                .dstSet = m_objectDescriptorSets[i],
                 .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = vk::DescriptorType::eUniformBuffer,
-                .pBufferInfo = &globalUBOInfo
-            };
-
-            // Binding 1 -> Object SSBO
-            descriptorWrites[1] = vk::WriteDescriptorSet {
-                .dstSet = m_descriptorSets[i],
-                .dstBinding = 1,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
                 .descriptorType = vk::DescriptorType::eStorageBuffer,
                 .pBufferInfo = &objectSSBOInfo
             };
-
-            m_device->GetDevice().updateDescriptorSets(descriptorWrites, {});
+            m_device->GetDevice().updateDescriptorSets(objectWrite, {});
         }
     }
 
@@ -567,105 +554,7 @@ namespace Felina
         }
     }
 
-    void Renderer::RecordForwardCommandBuffer(uint32_t imageIndex)
-    {
-        // Reset command buffer
-        m_commandBuffers[m_currentFrame].begin({});
-
-        // Transition image layout to color attachment
-        TransitionImageLayout(
-            m_swapchain->GetImages()[imageIndex],
-            m_swapchain->GetSurfaceFormat().format,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            {},
-            vk::AccessFlagBits2::eColorAttachmentWrite,
-            vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput
-        );
-
-        // Setup color attachment
-        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
-        vk::RenderingAttachmentInfo attachmentInfo{
-            .imageView = m_swapchain->GetImageViews()[imageIndex],
-            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-            .clearValue = clearColor
-        };
-
-        // Setup rendering info
-        auto swapchainExtent = m_swapchain->GetExtent();
-        vk::RenderingInfo renderingInfo = {
-            .renderArea = {.offset = { 0, 0 }, .extent = swapchainExtent},
-            .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &attachmentInfo
-        };
-
-        // Begin rendering
-        m_commandBuffers[m_currentFrame].beginRendering(renderingInfo);
-
-        // Bind the graphic pipeline (the attachment will be bound to the fragment shader output)
-        m_commandBuffers[m_currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, m_fwdPipeline);
-
-        // Set viewport and scissor size (dynamic rendering)
-        m_commandBuffers[m_currentFrame].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f));
-        m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
-
-        // Bind descriptor sets
-        m_commandBuffers[m_currentFrame].bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics, m_fwdPipelineLayout, 0,
-            *m_descriptorSets[m_currentFrame], nullptr
-        );
-        
-        // Draw all the objects
-        std::vector<Object*> objects = m_scene.GetObjects();
-        for (uint32_t i = 0; i < objects.size(); i++)
-        {
-            Object* obj = objects[i];
-
-            // Update object index
-            PushConstants pc{ i };
-            m_commandBuffers[m_currentFrame].pushConstants(
-                *m_fwdPipelineLayout,
-                vk::ShaderStageFlagBits::eVertex,
-                0,
-                vk::ArrayProxy<const PushConstants>(1, &pc)
-            );
-
-            // Bind vertex and index buffer
-            auto& mesh = obj->GetMesh();
-            m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
-            m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
-
-            // Draw call
-            m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
-        }
-
-        // Draw Dear ImGui
-        DrawImGuiFrame(ImGui::GetDrawData());
-
-        // Finish up rendering
-        m_commandBuffers[m_currentFrame].endRendering();
-
-        // After rendering, transition the swapchain image to PRESENT_SRC
-        TransitionImageLayout(
-            m_swapchain->GetImages()[imageIndex],
-            m_swapchain->GetSurfaceFormat().format,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageLayout::ePresentSrcKHR,
-            vk::AccessFlagBits2::eColorAttachmentWrite,
-            {},
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::PipelineStageFlagBits2::eBottomOfPipe
-        );
-
-        // Finish recording command onto the buffer
-        m_commandBuffers[m_currentFrame].end();
-    }
-
-    void Renderer::RecordDeferredCommandBuffer(uint32_t imageIndex)
+    void Renderer::RecordCommandBuffer(uint32_t imageIndex)
     {
         auto& cmdBuf = m_commandBuffers[m_currentFrame];
         auto& gBuffer = m_gBuffers[m_currentFrame];
@@ -748,10 +637,11 @@ namespace Felina
         );
         m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
 
-        // Bind descriptor sets (global UBO, object SSBO)
+        // Bind descriptor sets (camera UBO, object SSBO)
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics, m_defGeometryPipelineLayout, 0,
-            *m_descriptorSets[m_currentFrame], nullptr
+            { m_cameraDescriptorSets[m_currentFrame], m_objectDescriptorSets[m_currentFrame]},
+            nullptr
         );
 
         // Draw all the objects
@@ -761,12 +651,12 @@ namespace Felina
             Object* obj = objects[i];
 
             // Update object index
-            PushConstants pc{ i };
+            ObjectPushConst pc{ i };
             m_commandBuffers[m_currentFrame].pushConstants(
                 *m_defGeometryPipelineLayout,
                 vk::ShaderStageFlagBits::eVertex,
                 0,
-                vk::ArrayProxy<const PushConstants>(1, &pc)
+                vk::ArrayProxy<const ObjectPushConst>(1, &pc)
             );
 
             // Bind vertex and index buffer
@@ -837,10 +727,11 @@ namespace Felina
         );
         m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
 
-        // Bind descriptor sets (global UBO, object SSBO)
+        // Bind descriptor sets (camera UBO, G-buffer)
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics, m_defLightingPipelineLayout, 0,
-            *gBuffer->GetDescriptorSet(), nullptr
+            { m_cameraDescriptorSets[m_currentFrame], gBuffer->GetDescriptorSet() }, 
+            nullptr
         );
 
         // Draw a triangle that covers the screen (optimization of a quad)
