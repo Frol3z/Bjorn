@@ -13,7 +13,7 @@ namespace Felina
 		public:
 			Swapchain(const Device& device, const Window& window, const vk::raii::SurfaceKHR& surface);
 
-			void RecreateSwapchain();
+			void Recreate();
 			std::pair<vk::Result, uint32_t> AcquireNextImage(const vk::Semaphore& s);
 
 			const vk::SwapchainKHR& GetHandle() const { return *m_swapchain; }
@@ -23,13 +23,13 @@ namespace Felina
 			const std::vector<vk::raii::ImageView>& GetImageViews() const { return m_swapchainImageViews; }
 
 		private:
-			void CreateSwapchain();
-			void CleanUpSwapchain();
+			void Create();
+			void CleanUp();
 			void CreateImageViews();
 		
-			vk::SurfaceFormatKHR ChooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-			vk::Extent2D ChooseSwapchainExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
-			vk::PresentModeKHR ChooseSwapchainPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+			vk::SurfaceFormatKHR ChooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+			vk::Extent2D ChooseExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+			vk::PresentModeKHR ChoosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
 
 			const Device& m_device;
 			const vk::raii::SurfaceKHR& m_surface;

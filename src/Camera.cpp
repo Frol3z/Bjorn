@@ -36,14 +36,27 @@ namespace Felina
 		return m_viewMatrix;
 	}
 
+	glm::mat4 Camera::GetInvViewProj() const
+	{
+		return m_invViewProj;
+	}
+
 	void Camera::ComputeProjectionMatrix()
 	{
 		m_projectionMatrix = glm::perspective(glm::radians(45.0f), m_right / m_bottom, m_near, m_far);
 		m_projectionMatrix[1][1] *= -1; // Flips Y-axis..
+		ComputeInvViewProj();
 	}
 
 	void Camera::ComputeViewMatrix()
 	{
 		m_viewMatrix = glm::lookAt(m_transform.GetPosition(), glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		ComputeInvViewProj();
+	}
+
+	void Camera::ComputeInvViewProj()
+	{
+		// TODO: avoid recomputing the inverse twice when both view and projection change
+		m_invViewProj = glm::inverse(m_projectionMatrix * m_viewMatrix);
 	}
 }

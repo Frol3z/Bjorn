@@ -15,13 +15,16 @@ namespace Felina
 			void SetPosition(glm::vec3 newPosition);
 			glm::mat4 GetProjectionMatrix() const;
 			glm::mat4 GetViewMatrix() const;
+			glm::mat4 GetInvViewProj() const;
 	
 		private:
 			void ComputeProjectionMatrix();
 			void ComputeViewMatrix();
+			void ComputeInvViewProj();
 
 			glm::mat4 m_projectionMatrix;
 			glm::mat4 m_viewMatrix;
+			glm::mat4 m_invViewProj;
 
 			Transform m_transform;
 
