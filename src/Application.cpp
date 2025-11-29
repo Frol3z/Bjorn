@@ -64,17 +64,25 @@ namespace Felina
 		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 0.0f));
 		
 		// Load mesh
-		auto& rm = ResourceManager::GetInstance(*m_renderer);
-		rm.LoadMesh();
+		auto& rm = ResourceManager::GetInstance();
+		auto mesh = std::make_unique<Mesh>(); // Creating the hardcoded cube mesh
+		auto meshID = rm.LoadMesh(std::move(mesh), "CubeMesh", *m_renderer);
 
-		// Create an object
-		auto obj = std::make_unique<Object>("Cube", rm.GetMesh("CubeMesh"));
+		// Load materials
+		auto mCube1 = std::make_unique<Material>(glm::vec3(0.5, 0.1, 0.5), glm::vec4(1.0, 1.0, 1.0, 5.0));
+		auto mCube2 = std::make_unique<Material>(glm::vec3(0.5, 0.5, 0.1), glm::vec4(1.0, 1.0, 1.0, 5.0));
+		auto mat1ID = rm.LoadMaterial(std::move(mCube1), "m_Cube1");
+		auto mat2ID = rm.LoadMaterial(std::move(mCube2), "m_Cube2");
+
+		// Create one cube
+		auto obj = std::make_unique<Object>("Cube", meshID, mat1ID);
 		Transform& t = obj->GetTransform();
 		t.Rotate(glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 		t.Translate(glm::vec3(-1.0f, 0.0f, 0.0f));
 		m_scene->AddObject(std::move(obj));
 
-		auto obj2 = std::make_unique<Object>("Cube (1)", rm.GetMesh("CubeMesh"));
+		// Create second cube
+		auto obj2 = std::make_unique<Object>("Cube (1)", meshID, mat1ID);
 		Transform& t2 = obj2->GetTransform();
 		t2.Rotate(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 		t2.Translate(glm::vec3(1.0f, 0.0f, 0.0f));
@@ -96,7 +104,7 @@ namespace Felina
 	void Application::CleanUp()
 	{
 		// Unload all resources
-		auto& rm = ResourceManager::GetInstance(*m_renderer);
+		auto& rm = ResourceManager::GetInstance();
 		rm.UnloadAll();
 
 		// ImGui
