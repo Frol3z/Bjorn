@@ -37,8 +37,11 @@ namespace Felina
 			void UnloadAll();
 
 			const Mesh& GetMesh(MeshID id) const;
+			const std::string& GetMeshName(MeshID id) const;
+			const std::unordered_map<MeshID, Resource<Mesh>>& GetMeshes() const { return m_meshes; }
 			const Material& GetMaterial(MaterialID id) const;
-			const std::unordered_map<MaterialID, Resource<Material>>& GetMaterials() const { return m_materials; };
+			const std::string& GetMaterialName(MaterialID id) const;
+			const std::unordered_map<MaterialID, Resource<Material>>& GetMaterials() const { return m_materials; }
 		private:
 			ResourceManager(){} // Private constructor
 

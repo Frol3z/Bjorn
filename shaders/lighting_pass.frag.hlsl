@@ -7,6 +7,7 @@ struct VertexOutput
 // Camera uniform buffer (set 0)
 struct CameraData
 {
+    float3 position;
     float4x4 view;
     float4x4 proj;
     float4x4 invViewProj;
@@ -37,7 +38,7 @@ Texture2D gDepth;
 SamplerState gDepthSampler;
 
 // Hardcoded directional light
-static const float3 LIGHT_POS = float3(0.0, 1.0, 0.0);
+static const float3 LIGHT_DIR = float3(1.0, 1.0, -1.0);
 static const float3 LIGHT_COL = float3(1.0, 0.73, 0.23);
 
 float3 reconstructWorldPosition(float depth, float2 uv)
@@ -51,11 +52,16 @@ float3 reconstructWorldPosition(float depth, float2 uv)
 float4 main(VertexOutput inVert) : SV_TARGET0
 {
     float3 albedo = gAlbedo.Sample(gAlbedoSampler, inVert.uv).rgb;
+    float4 specular = gSpecular.Sample(gSpecularSampler, inVert.uv).rgba;
     float3 normal = normalize(gNormal.Sample(gNormalSampler, inVert.uv).rgb);
     float depth = gDepth.Sample(gDepthSampler, inVert.uv).r;
-    //float3 position = reconstructWorldPosition(depth, inVert.uv);
+    float3 fragWorldPosition = reconstructWorldPosition(depth, inVert.uv);
     
-    float3 lightDir = -LIGHT_POS;
-    float3 outColor = albedo * LIGHT_COL * max(dot(normalize(lightDir), normal), 0.0);
-    return float4(outColor, 1.0);
+    // Blinn-Phong
+    float3 l = -normalize(LIGHT_DIR);
+    float3 v = fragWorldPosition - cameraData.position;
+    float3 h = normalize(l + v);
+    float3 diffuse = albedo * LIGHT_COL * max(dot(normalize(l), normal), 0.0);
+    float3 spec = specular.rgb * pow(max(dot(normal, h), 0), specular.a);
+    return float4(diffuse + spec, 1.0);
 }

@@ -189,11 +189,12 @@ namespace Felina
     void Renderer::UpdateFrameData()
     {   
         // Update camera data
-        CameraData globalUBO{};
-        globalUBO.view = m_scene.GetCamera().GetViewMatrix();
-        globalUBO.proj = m_scene.GetCamera().GetProjectionMatrix();
-        globalUBO.invViewProj = m_scene.GetCamera().GetInvViewProj();
-        m_cameraUBOs[m_currentFrame]->LoadData(&globalUBO, sizeof(globalUBO));
+        CameraData cameraData{};
+        cameraData.position = m_scene.GetCamera().GetPosition();
+        cameraData.view = m_scene.GetCamera().GetViewMatrix();
+        cameraData.proj = m_scene.GetCamera().GetProjectionMatrix();
+        cameraData.invViewProj = m_scene.GetCamera().GetInvViewProj();
+        m_cameraUBOs[m_currentFrame]->LoadData(&cameraData, sizeof(cameraData));
 
         // Fill the object data storage buffer
         std::vector<Object*> objects = m_scene.GetObjects();

@@ -69,7 +69,7 @@ namespace Felina
 		auto meshID = rm.LoadMesh(std::move(mesh), "CubeMesh", *m_renderer);
 
 		// Load materials
-		auto mCube1 = std::make_unique<Material>(glm::vec3(0.5, 0.1, 0.5), glm::vec4(1.0, 1.0, 1.0, 5.0));
+		auto mCube1 = std::make_unique<Material>(glm::vec3(0.5, 0.1, 0.5), glm::vec4(1.0, 1.0, 1.0, 200.0));
 		auto mCube2 = std::make_unique<Material>(glm::vec3(0.5, 0.5, 0.1), glm::vec4(1.0, 1.0, 1.0, 5.0));
 		auto mat1ID = rm.LoadMaterial(std::move(mCube1), "m_Cube1");
 		auto mat2ID = rm.LoadMaterial(std::move(mCube2), "m_Cube2");

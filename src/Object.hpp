@@ -14,6 +14,9 @@ namespace Felina
 				: m_name(name), m_mesh(mesh), m_material(material)
 			{}
 			
+			void SetMaterial(MaterialID id) { m_material = id; }
+			void SetMesh(MeshID id) { m_mesh = id; }
+
 			const std::string& GetName() const { return m_name; }
 			MeshID GetMesh() const { return m_mesh; }
 			MaterialID GetMaterial() const { return m_material; }

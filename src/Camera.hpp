@@ -13,6 +13,7 @@ namespace Felina
 		
 			void UpdateProjectionMatrix(float newWidth, float newHeight);
 			void SetPosition(glm::vec3 newPosition);
+			glm::vec3 GetPosition() const { return m_transform.GetPosition(); }
 			glm::mat4 GetProjectionMatrix() const;
 			glm::mat4 GetViewMatrix() const;
 			glm::mat4 GetInvViewProj() const;

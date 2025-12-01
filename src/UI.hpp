@@ -11,6 +11,7 @@ namespace Felina
 	class UI
 	{
 		public:
+			UI();
 			void Update(Scene& scene);
 
 		private:

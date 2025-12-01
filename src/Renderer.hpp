@@ -28,6 +28,7 @@ namespace Felina
 		public:
 			struct CameraData
 			{
+				glm::vec3 position;
 				glm::mat4 view;
 				glm::mat4 proj;
 				glm::mat4 invViewProj;

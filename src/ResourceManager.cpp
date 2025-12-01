@@ -36,11 +36,27 @@ namespace Felina
 		return *(it->second.resource);
 	}
 
+	const std::string& ResourceManager::GetMeshName(MeshID id) const
+	{
+		auto it = m_meshes.find(id);
+		if(it == m_meshes.end())
+			throw std::runtime_error("[RESOURCE MANAGER] Mesh with ID " + std::to_string(id) + "not found!");
+		return (it->second.name);
+	}
+
 	const Material& ResourceManager::GetMaterial(MaterialID id) const
 	{
 		auto it = m_materials.find(id);
 		if (it == m_materials.end())
 			throw std::runtime_error("[RESOURCE MANAGER] Material with ID " + std::to_string(id) + "not found!");
 		return *(it->second.resource);
+	}
+
+	const std::string& ResourceManager::GetMaterialName(MaterialID id) const
+	{
+		auto it = m_materials.find(id);
+		if (it == m_materials.end())
+			throw std::runtime_error("[RESOURCE MANAGER] Material with ID " + std::to_string(id) + "not found!");
+		return (it->second.name);
 	}
 }

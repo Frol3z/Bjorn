@@ -1,6 +1,7 @@
 // Camera uniform buffer
 struct CameraData
 {
+    float3 position;
     float4x4 view;
     float4x4 proj;
     float4x4 invViewProj;
