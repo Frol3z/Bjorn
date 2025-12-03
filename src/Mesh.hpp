@@ -32,7 +32,9 @@ namespace Felina
 	class Mesh
 	{
 		public:
-			Mesh();
+			enum Type { CUBE = 0, SPHERE };
+		public:
+			Mesh(Mesh::Type type);
 			~Mesh();
 
 			void Load(Device& device);
@@ -51,6 +53,9 @@ namespace Felina
 			vk::IndexType GetIndexType() const { return vk::IndexType::eUint16; };
 
 		private:
+			void CreateCubeMesh();
+			void CreateSphereMesh(uint32_t nSlices = 32, uint32_t nStacks = 32);
+
 			void CreateStagingBuffer(Device& device, vk::DeviceSize size);
 			void DestroyStagingBuffer();
 			void CreateVertexBuffer(Device& device, vk::DeviceSize size);

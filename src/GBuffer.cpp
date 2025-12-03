@@ -97,7 +97,7 @@ namespace Felina
     {
         vk::ImageCreateInfo imageCreateInfo{
             .imageType = vk::ImageType::e2D,
-            .format = vk::Format::eR8G8B8A8Unorm, // RGB specular + A shininess
+            .format = vk::Format::eR16G16B16A16Sfloat, // RGB specular + A shininess
             .extent = vk::Extent3D{ m_extent.width, m_extent.height, 1 },
             .mipLevels = 1,
             .arrayLayers = 1,

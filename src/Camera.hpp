@@ -1,24 +1,31 @@
 #pragma once
 
-#include "Transform.hpp"
-
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/glm.hpp>
 
 namespace Felina
 {
+	// This definitions may be moved somewhere else
+	// Coordinate system is right-handed Z-up
+	constexpr glm::vec3 WORLD_UP{ 0.0, 0.0, 1.0 };
+	constexpr glm::vec3 WORLD_RIGHT{ 1.0, 0.0, 0.0 };
+	constexpr glm::vec3 WORLD_FORWARD{ 0.0, 1.0, 0.0 };
+	constexpr glm::vec3 WORLD_ORIGIN{ 0.0, 0.0, 0.0 };
+
 	class Camera
 	{
 		public:
 			Camera(float width, float height, float nearPlane = 0.1f, float farPlane = 1000.0f);
 		
+			void Rotate(double azimuth, double elevation);
 			void UpdateProjectionMatrix(float newWidth, float newHeight);
-			void SetPosition(glm::vec3 newPosition);
-			glm::vec3 GetPosition() const { return m_transform.GetPosition(); }
+			void SetPosition(glm::vec3 position);
+			glm::vec3 GetPosition() const { return m_position; }
 			glm::mat4 GetProjectionMatrix() const;
 			glm::mat4 GetViewMatrix() const;
 			glm::mat4 GetInvViewProj() const;
 	
 		private:
+			void ComputeLocalCoordinateSystem();
 			void ComputeProjectionMatrix();
 			void ComputeViewMatrix();
 			void ComputeInvViewProj();
@@ -27,7 +34,14 @@ namespace Felina
 			glm::mat4 m_viewMatrix;
 			glm::mat4 m_invViewProj;
 
-			Transform m_transform;
+			// Camera/view space
+			glm::vec3 m_position;
+			glm::vec3 m_localUp;
+			glm::vec3 m_localRight;
+			glm::vec3 m_localForward;
+			
+			// Target position (world origin by default)
+			glm::vec3 m_target;
 
 			float m_left = 0.0f;
 			float m_right = 0.0f;

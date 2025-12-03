@@ -52,16 +52,18 @@ float3 reconstructWorldPosition(float depth, float2 uv)
 float4 main(VertexOutput inVert) : SV_TARGET0
 {
     float3 albedo = gAlbedo.Sample(gAlbedoSampler, inVert.uv).rgb;
-    float4 specular = gSpecular.Sample(gSpecularSampler, inVert.uv).rgba;
+    float4 rawSpecular = gSpecular.Sample(gSpecularSampler, inVert.uv);
+    float3 specular = rawSpecular.rgb / 255.0;
+    float shininess = rawSpecular.a;
     float3 normal = normalize(gNormal.Sample(gNormalSampler, inVert.uv).rgb);
     float depth = gDepth.Sample(gDepthSampler, inVert.uv).r;
     float3 fragWorldPosition = reconstructWorldPosition(depth, inVert.uv);
     
     // Blinn-Phong
     float3 l = -normalize(LIGHT_DIR);
-    float3 v = fragWorldPosition - cameraData.position;
+    float3 v = normalize(cameraData.position - fragWorldPosition);
     float3 h = normalize(l + v);
     float3 diffuse = albedo * LIGHT_COL * max(dot(normalize(l), normal), 0.0);
-    float3 spec = specular.rgb * pow(max(dot(normal, h), 0), specular.a);
+    float3 spec = specular * pow(max(dot(normal, h), 0), shininess);
     return float4(diffuse + spec, 1.0);
 }
