@@ -20,7 +20,7 @@ struct FragmentOutput
 {
 	float4 albedo : SV_TARGET0;
 	float4 specular : SV_TARGET1;
-    float4 materialInfo : SV_Target2;
+    float4 materialInfo : SV_TARGET2;
 	float4 normal : SV_TARGET3;
 };
 
