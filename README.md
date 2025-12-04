@@ -11,13 +11,12 @@ Its purpose is to provide a space for experimenting on topics such as real time 
 # Features
 - simple user interface
 - full deferred rendering pipeline
-- material system using Blinn-Phong lighting model
 # Roadmap
 ## Short term
-- texture support
-- multiple lights
+- material system and texture support
+- directional and point light support
 - improved UX
-- glTF loading
+- model loading
 ## Long term
 - PBR materials
 - cascaded shadow maps
@@ -53,17 +52,9 @@ cmake ..
 5. Set `Felina` as the **startup project** in Visual Studio.
 6. Build and run the project.
 
-# Architecture
+# Class diagram
 ![Diagram](diagram.png)
 
-## GBuffer structure
-| Attachment # | R | G | B | A |
-|---|---|---|---|---|
-| 0 | Albedo.R | Albedo.G | Albedo.B | Unused |
-| 1 | Specular.R | Specular.G | Specular.B | Unused|
-| 2 | Ambient Coeff. | Diffuse Coeff. | Specular Coeff. | Unused |
-| 3 | Normal.X | Normal.Y | Normal.Z | Unused |
-| 4 | Depth | Depth | Depth | Depth |
 # Examples
 
 # References

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -21,7 +20,7 @@ namespace Felina
 		const glm::vec3& GetPosition() const { return m_position; }
 		const glm::quat& GetRotation() const { return m_rotation; }
 		const glm::vec3& GetScale() const { return m_scale; }
-		const glm::mat4& GetMatrix() const { return m_matrix; };
+		const glm::mat4& GetMatrix() const { return m_transform; };
 
 	private:
 		void UpdateMatrix();
@@ -30,6 +29,6 @@ namespace Felina
 		glm::quat m_rotation;
 		glm::vec3 m_scale;
 
-		glm::mat4 m_matrix;
+		glm::mat4 m_transform;
 	};
 }

@@ -5,9 +5,6 @@
 
 #include <glm/glm.hpp>
 
-// Required for MaterialID and MeshID definitions
-#include "ResourceManager.hpp"
-
 struct ImGui_ImplVulkan_InitInfo;
 struct ImDrawData;
 
@@ -28,17 +25,9 @@ namespace Felina
 		public:
 			struct CameraData
 			{
-				glm::vec3 position;
 				glm::mat4 view;
 				glm::mat4 proj;
 				glm::mat4 invViewProj;
-			};
-
-			struct MaterialData
-			{
-				glm::vec3 albedo;
-				glm::vec3 specular;
-				glm::vec4 materialInfo;
 			};
 
 			struct ObjectData
@@ -50,7 +39,6 @@ namespace Felina
 			struct ObjectPushConst
 			{
 				uint32_t objectIndex;
-				uint32_t materialIndex;
 			};
 
 			// NOTE: for a greater number of concurrent frames
@@ -61,16 +49,12 @@ namespace Felina
 			// Max number of drawable objects
 			static constexpr uint32_t MAX_OBJECTS = 100;
 
-			// Max number of materials
-			static constexpr uint32_t MAX_MATERIALS = 10;
-
 			// Max number of descriptor sets PER FRAME
 			// Current sets:
 			// - camera UBO
-			// - objects SSBO
-			// - materials SSBO
+			// - object SSBO
 			// - GBuffer (see GBuffer class)
-			static constexpr uint32_t MAX_DESCRIPTOR_SETS = 4;
+			static constexpr uint32_t MAX_DESCRIPTOR_SETS = 3;
 
 		public:
 			Renderer(Application& app, const Window& window, const Scene& scene);
@@ -120,8 +104,6 @@ namespace Felina
 			const Scene& m_scene;
 
 			uint32_t m_currentFrame = 0;
-			// Look-up table to match the Material ID to the physical GPU storage buffer index
-			std::array<std::unordered_map<MaterialID, uint32_t>, MAX_FRAMES_IN_FLIGHT> m_materialIDToSSBOID;
 
 			// Dear ImGui custom vertex shader (temporary fix for colors issue)
 			std::vector<char> m_imGuiCustomVertShaderCode;
@@ -137,7 +119,6 @@ namespace Felina
 			std::array<std::unique_ptr<GBuffer>, MAX_FRAMES_IN_FLIGHT> m_gBuffers;
 
 			vk::raii::DescriptorSetLayout m_cameraSetLayout = nullptr;
-			vk::raii::DescriptorSetLayout m_materialSetLayout = nullptr;
 			vk::raii::DescriptorSetLayout m_objectSetLayout = nullptr;
 			vk::PushConstantRange m_objectPushConst;
 
@@ -150,10 +131,8 @@ namespace Felina
 
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_cameraUBOs;
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;
-			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_materialSSBOs;
 			std::vector<vk::raii::DescriptorSet> m_cameraDescriptorSets;
 			std::vector<vk::raii::DescriptorSet> m_objectDescriptorSets;
-			std::vector<vk::raii::DescriptorSet> m_materialDescriptorSets;
 
 			std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
 			std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;

@@ -5,7 +5,7 @@
 namespace Felina
 {
 	Transform::Transform()
-		: m_position(0.0f), m_rotation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f)), m_scale(1.0f), m_matrix(1.0f)
+		: m_position(0.0f), m_rotation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f)), m_scale(1.0f), m_transform(1.0f)
 	{ }
 
 	void Transform::Translate(const glm::vec3& translation)
@@ -46,6 +46,6 @@ namespace Felina
 
 	void Transform::UpdateMatrix()
 	{
-		m_matrix = glm::translate(glm::mat4(1.0f), m_position) * glm::mat4_cast(m_rotation) * glm::scale(glm::mat4(1.0f), m_scale);
+		m_transform = glm::translate(glm::mat4(1.0f), m_position) * glm::mat4_cast(m_rotation) * glm::scale(glm::mat4(1.0f), m_scale);
 	}
 }
