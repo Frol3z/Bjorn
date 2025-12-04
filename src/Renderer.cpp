@@ -11,6 +11,7 @@
 #include "GBuffer.hpp"
 #include "Common.hpp"
 #include "PipelineBuilder.hpp"
+#include "ResourceManager.hpp"
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -187,25 +188,48 @@ namespace Felina
 
     void Renderer::UpdateFrameData()
     {   
-        // Update the global uniform buffer
-        CameraData globalUBO{};
-        globalUBO.view = m_scene.GetCamera().GetViewMatrix();
-        globalUBO.proj = m_scene.GetCamera().GetProjectionMatrix();
-        globalUBO.invViewProj = m_scene.GetCamera().GetInvViewProj();
-        m_cameraUBOs[m_currentFrame]->LoadData(&globalUBO, sizeof(globalUBO));
+        // Update camera data
+        CameraData cameraData{};
+        cameraData.position = m_scene.GetCamera().GetPosition();
+        cameraData.view = m_scene.GetCamera().GetViewMatrix();
+        cameraData.proj = m_scene.GetCamera().GetProjectionMatrix();
+        cameraData.invViewProj = m_scene.GetCamera().GetInvViewProj();
+        m_cameraUBOs[m_currentFrame]->LoadData(&cameraData, sizeof(cameraData));
 
         // Fill the object data storage buffer
         std::vector<Object*> objects = m_scene.GetObjects();
         std::vector<ObjectData> objectDatas;
         for (Object* obj : objects)
         {
-            ObjectData data{};
-            data.model = obj->GetModelMatrix();
+            // Object data
+            ObjectData objData{};
+            objData.model = obj->GetModelMatrix();
             // TODO: avoid recomputing the normal matrix each frame when it's not mandatory (inverse computation)
-            data.normal = obj->GetNormalMatrix();
-            objectDatas.push_back(data);
+            objData.normal = obj->GetNormalMatrix();
+            objectDatas.push_back(objData);
         }
         m_objectSSBOs[m_currentFrame]->LoadData(objectDatas.data(), objectDatas.size() * sizeof(ObjectData));
+
+        // Fill the material data storage buffer
+        std::vector<MaterialData> materialDatas;
+        auto& mapping = m_materialIDToSSBOID[m_currentFrame];
+        uint32_t index = 0;
+        for (const auto& [id, res] : ResourceManager::GetInstance().GetMaterials())
+        {
+            // Get raw pointer to the material
+            const Material* mat = res.resource.get();
+
+            // Fill the MaterialData struct
+            MaterialData matData{};
+            matData.albedo = mat->GetAlbedo();
+            matData.specular = mat->GetSpecular();
+            matData.materialInfo = mat->GetCoefficients();
+            materialDatas.push_back(matData);
+
+            // Keep track of the storage buffer IDs
+            mapping[id] = index++;
+        }
+        m_materialSSBOs[m_currentFrame]->LoadData(materialDatas.data(), materialDatas.size() * sizeof(MaterialData));
     }
 
     void Renderer::UpdateOnFramebufferResized()
@@ -359,6 +383,21 @@ namespace Felina
             .pBindings = &objectBinding
         };
         m_objectSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), objectLayout);
+
+        // Material set layout
+        // Binding 0 -> MaterialData
+        vk::DescriptorSetLayoutBinding materialBinding{
+            .binding = 0,
+            .descriptorType = vk::DescriptorType::eStorageBuffer,
+            .descriptorCount = 1,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+            .pImmutableSamplers = nullptr
+        };
+        vk::DescriptorSetLayoutCreateInfo materialLayout{
+            .bindingCount = 1,
+            .pBindings = &materialBinding
+        };
+        m_materialSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), materialLayout);
     }
 
     void Renderer::CreatePushConstant()
@@ -384,7 +423,7 @@ namespace Felina
         pipelineBuilder.SetShaderStages(geomShaderStages);
         pipelineBuilder.SetColorBlending(static_cast<uint32_t>(gBuffer->GetAttachmentsCount() - 1)); // Depth attachment doesn't need blending!
 
-        std::vector<vk::DescriptorSetLayout> layouts{ m_cameraSetLayout, m_objectSetLayout };
+        std::vector<vk::DescriptorSetLayout> layouts{ m_cameraSetLayout, m_objectSetLayout, m_materialSetLayout };
         std::vector<vk::PushConstantRange> ranges{ m_objectPushConst };
         pipelineBuilder.SetPipelineLayout(layouts, ranges);
         pipelineBuilder.SetAttachmentsFormat(gBuffer->GetColorAttachmentFormats(), gBuffer->GetDepthFormat());
@@ -449,12 +488,20 @@ namespace Felina
             m_cameraUBOs[i] = std::make_unique<Buffer>(m_device->GetAllocator(), uboInfo, uboAllocInfo, true);
 
             // Object data storage buffer creation
-            vk::BufferCreateInfo ssboInfo{};
-            ssboInfo.size = sizeof(ObjectData) * MAX_OBJECTS;
-            ssboInfo.usage = vk::BufferUsageFlagBits::eStorageBuffer;
-            VmaAllocationCreateInfo ssboAllocInfo{};
-            ssboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-            m_objectSSBOs[i] = std::make_unique<Buffer>(m_device->GetAllocator(), ssboInfo, ssboAllocInfo, true);
+            vk::BufferCreateInfo objectSsboInfo{};
+            objectSsboInfo.size = sizeof(ObjectData) * MAX_OBJECTS;
+            objectSsboInfo.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+            VmaAllocationCreateInfo objectSsboAllocInfo{};
+            objectSsboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+            m_objectSSBOs[i] = std::make_unique<Buffer>(m_device->GetAllocator(), objectSsboInfo, objectSsboAllocInfo, true);
+
+            // Material data storage buffer creation
+            vk::BufferCreateInfo materialSsboInfo{};
+            materialSsboInfo.size = sizeof(MaterialData) * MAX_MATERIALS;
+            materialSsboInfo.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+            VmaAllocationCreateInfo materialSsboAllocInfo{};
+            materialSsboAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+            m_materialSSBOs[i] = std::make_unique<Buffer>(m_device->GetAllocator(), materialSsboInfo, materialSsboAllocInfo, true);
         }
     }
 
@@ -494,7 +541,7 @@ namespace Felina
             };
             m_cameraDescriptorSets = m_device->GetDevice().allocateDescriptorSets(cameraAllocInfo);
 
-            // Camera descriptor sets allocation
+            // Object descriptor sets allocation
             std::vector<vk::DescriptorSetLayout> objectLayouts(MAX_FRAMES_IN_FLIGHT, m_objectSetLayout);
             vk::DescriptorSetAllocateInfo objectAllocInfo{
                 .descriptorPool = m_descriptorPool,
@@ -502,6 +549,15 @@ namespace Felina
                 .pSetLayouts = objectLayouts.data()
             };
             m_objectDescriptorSets = m_device->GetDevice().allocateDescriptorSets(objectAllocInfo);
+
+            // Material descriptor sets allocation
+            std::vector<vk::DescriptorSetLayout> materialLayouts(MAX_FRAMES_IN_FLIGHT, m_materialSetLayout);
+            vk::DescriptorSetAllocateInfo materialAllocInfo{
+                .descriptorPool = m_descriptorPool,
+                .descriptorSetCount = static_cast<uint32_t>(materialLayouts.size()),
+                .pSetLayouts = materialLayouts.data()
+            };
+            m_materialDescriptorSets = m_device->GetDevice().allocateDescriptorSets(materialAllocInfo);
         }
         
         // Bind the buffers to the corresponding set
@@ -538,6 +594,22 @@ namespace Felina
                 .pBufferInfo = &objectSSBOInfo
             };
             m_device->GetDevice().updateDescriptorSets(objectWrite, {});
+
+            // Material descriptor set
+            vk::DescriptorBufferInfo materialSSBOInfo{
+                .buffer = m_materialSSBOs[i]->GetHandle(),
+                .offset = 0,
+                .range = sizeof(MaterialData) * MAX_MATERIALS
+            };
+            vk::WriteDescriptorSet materialWrite{
+                .dstSet = m_materialDescriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo = &materialSSBOInfo
+            };
+            m_device->GetDevice().updateDescriptorSets(materialWrite, {});
         }
     }
 
@@ -640,7 +712,7 @@ namespace Felina
         // Bind descriptor sets (camera UBO, object SSBO)
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics, m_defGeometryPipelineLayout, 0,
-            { m_cameraDescriptorSets[m_currentFrame], m_objectDescriptorSets[m_currentFrame]},
+            { m_cameraDescriptorSets[m_currentFrame], m_objectDescriptorSets[m_currentFrame], m_materialDescriptorSets[m_currentFrame] },
             nullptr
         );
 
@@ -650,8 +722,11 @@ namespace Felina
         {
             Object* obj = objects[i];
 
-            // Update object index
-            ObjectPushConst pc{ i };
+            // Update push const
+            ObjectPushConst pc{
+                .objectIndex = i,
+                .materialIndex = m_materialIDToSSBOID[m_currentFrame][obj->GetMaterial()]
+            };
             m_commandBuffers[m_currentFrame].pushConstants(
                 *m_defGeometryPipelineLayout,
                 vk::ShaderStageFlagBits::eVertex,
@@ -660,7 +735,7 @@ namespace Felina
             );
 
             // Bind vertex and index buffer
-            auto& mesh = obj->GetMesh();
+            auto& mesh = ResourceManager::GetInstance().GetMesh(obj->GetMesh());
             m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
             m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
 

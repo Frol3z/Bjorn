@@ -10,6 +10,10 @@
 
 namespace Felina
 {
+	UI::UI()
+		: m_displayedPosition(glm::vec3(0.0f)), m_displayedRotation(glm::vec3(0.0f)), m_displayedScale(glm::vec3(0.0f))
+	{}
+
 	void UI::Update(Scene& scene)
 	{
 		ImGui_ImplVulkan_NewFrame();
@@ -64,6 +68,8 @@ namespace Felina
 		{
 			ImGui::SeparatorText(m_hierarchySelection->GetName().c_str());
 
+			// Transform
+			// TODO: highlight in the UI that this is the transform-dedicated section
 			Transform& t = m_hierarchySelection->GetTransform();
 
 			if (ImGui::DragFloat3("Position", &m_displayedPosition.x, 0.01f))
@@ -80,6 +86,55 @@ namespace Felina
 			if (ImGui::DragFloat3("Scale", &m_displayedScale.x, 0.01f))
 			{
 				t.SetScale(m_displayedScale);
+			}
+
+			// Mesh
+			auto& rm = ResourceManager::GetInstance();
+			MeshID selectedMesh = m_hierarchySelection->GetMesh();
+			if (ImGui::BeginCombo("Mesh", rm.GetMeshName(selectedMesh).c_str(), 0))
+			{
+				static ImGuiTextFilter filter;
+				if (ImGui::IsWindowAppearing())
+				{
+					ImGui::SetKeyboardFocusHere();
+					filter.Clear();
+				}
+				ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
+				filter.Draw("##Filter", -FLT_MIN);
+
+				for (auto& [id, mesh] : rm.GetMeshes())
+				{
+					auto& name = rm.GetMeshName(id);
+					const bool isSelected = (id == selectedMesh);
+					if (filter.PassFilter(name.c_str()))
+						if (ImGui::Selectable(name.c_str(), isSelected))
+							m_hierarchySelection->SetMesh(id);
+				}
+				ImGui::EndCombo();
+			}
+
+			// Material
+			MaterialID selectedMaterial = m_hierarchySelection->GetMaterial();
+			if (ImGui::BeginCombo("Material", rm.GetMaterialName(selectedMaterial).c_str(), 0))
+			{
+				static ImGuiTextFilter filter;
+				if (ImGui::IsWindowAppearing())
+				{
+					ImGui::SetKeyboardFocusHere();
+					filter.Clear();
+				}
+				ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
+				filter.Draw("##Filter", -FLT_MIN);
+
+				for (auto& [id, material] : rm.GetMaterials())
+				{
+					auto& name = rm.GetMaterialName(id);
+					const bool isSelected = (id == selectedMaterial);
+					if (filter.PassFilter(name.c_str()))
+						if (ImGui::Selectable(name.c_str(), isSelected))
+							m_hierarchySelection->SetMaterial(id);
+				}
+				ImGui::EndCombo();
 			}
 		}
 		ImGui::End();

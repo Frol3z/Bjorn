@@ -30,10 +30,19 @@ namespace Felina
 			void MainLoop();
 			void CleanUp();
 
+			void ProcessInput();
+
 			std::string m_name;
 			std::unique_ptr<Window> m_window = nullptr;
 			std::unique_ptr<UI> m_UI = nullptr;
 			std::unique_ptr<Scene> m_scene = nullptr;
 			std::unique_ptr<Renderer> m_renderer = nullptr;
+
+			// Normalized [0,1] mouse input
+			double m_mouseX{ 0.0 };
+			double m_mouseY{ 0.0 };
+			float m_sensitivity{ 100.0f };
+			double m_mouseDeltaX{ 0.0 };
+			double m_mouseDeltaY{ 0.0 };
 	};
 }

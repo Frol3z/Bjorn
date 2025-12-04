@@ -11,6 +11,8 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 
+#include <iostream>
+
 namespace Felina 
 {
 	Application::Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight)
@@ -61,20 +63,39 @@ namespace Felina
 		// Z -> up
 
 		// Set camera position
-		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 0.0f));
+		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f));
 		
-		// Load mesh
-		auto& rm = ResourceManager::GetInstance(*m_renderer);
-		rm.LoadMesh();
+		// Load basic meshes (cube, sphere and quad)
+		auto& rm = ResourceManager::GetInstance();
+		auto cubeMesh = std::make_unique<Mesh>(Mesh::Type::CUBE);
+		auto sphereMesh = std::make_unique<Mesh>(Mesh::Type::SPHERE);
+		auto cubeMeshID = rm.LoadMesh(std::move(cubeMesh), "Cube Mesh", *m_renderer);
+		auto sphereMeshID = rm.LoadMesh(std::move(sphereMesh), "Sphere Mesh", *m_renderer);
 
-		// Create an object
-		auto obj = std::make_unique<Object>("Cube", rm.GetMesh("CubeMesh"));
+		// Load materials
+		constexpr float ambient = 0.02f;
+		auto mat1 = std::make_unique<Material>(
+			glm::vec3(0.98, 0.1, 0.1), // Albedo
+			glm::vec3(0.1, 0.1, 0.1), // Specular
+			glm::vec4(ambient, 0.8, 0.05, 0.05) // Material info
+		);
+		auto mat2 = std::make_unique<Material>(
+			glm::vec3(0.1, 0.6, 0.7), // Albedo
+			glm::vec3(1.0, 1.0, 1.0), // Specular
+			glm::vec4(ambient, 0.2, 0.8, 0.8) // Material info
+		);
+		auto mat1ID = rm.LoadMaterial(std::move(mat1), "Opaque Material");
+		auto mat2ID = rm.LoadMaterial(std::move(mat2), "Shiny Material");
+
+		// Create one cube
+		auto obj = std::make_unique<Object>("Cube", cubeMeshID, mat1ID);
 		Transform& t = obj->GetTransform();
 		t.Rotate(glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 		t.Translate(glm::vec3(-1.0f, 0.0f, 0.0f));
 		m_scene->AddObject(std::move(obj));
 
-		auto obj2 = std::make_unique<Object>("Cube (1)", rm.GetMesh("CubeMesh"));
+		// Create second cube
+		auto obj2 = std::make_unique<Object>("Sphere", sphereMeshID, mat2ID);
 		Transform& t2 = obj2->GetTransform();
 		t2.Rotate(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 		t2.Translate(glm::vec3(1.0f, 0.0f, 0.0f));
@@ -85,6 +106,11 @@ namespace Felina
 	{
 		while (!m_window->ShouldClose()) {
 			glfwPollEvents();
+			ProcessInput();
+
+			if(glfwGetMouseButton(m_window->GetHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+				m_scene->RotateCamera(m_mouseDeltaX, m_mouseDeltaY);
+			
 			m_UI->Update(*m_scene);
 			m_renderer->DrawFrame();
 		}
@@ -96,7 +122,7 @@ namespace Felina
 	void Application::CleanUp()
 	{
 		// Unload all resources
-		auto& rm = ResourceManager::GetInstance(*m_renderer);
+		auto& rm = ResourceManager::GetInstance();
 		rm.UnloadAll();
 
 		// ImGui
@@ -107,5 +133,28 @@ namespace Felina
 		// GLFW
 		m_window.reset();
 		glfwTerminate();
+	}
+
+	// Process mouse input and updates member variables
+	// m_mouseDeltaX and m_mouseDeltaY
+	void Application::ProcessInput()
+	{
+		// xpos, ypos -> mouse position at frame N
+		// m_mouseX, m_mouseY -> mouse position at frame N-1
+
+		// Poll for mouse position
+		double xpos{};
+		double ypos{};
+		glfwGetCursorPos(m_window->GetHandle(), &xpos, &ypos);
+		xpos /= m_window->GetWidth();
+		ypos /= m_window->GetHeight();
+
+		// Compute delta
+		m_mouseDeltaX = (m_mouseX - xpos) * m_sensitivity;
+		m_mouseDeltaY = (m_mouseY - ypos) * m_sensitivity;
+
+		// Update stored mouse position
+		m_mouseX = xpos;
+		m_mouseY = ypos;
 	}
 }

@@ -1,6 +1,7 @@
 // Camera uniform buffer
 struct CameraData
 {
+    float3 position;
     float4x4 view;
     float4x4 proj;
     float4x4 invViewProj;
@@ -23,6 +24,7 @@ StructuredBuffer<ObjectData> objectBuffer;
 struct PushConsts
 {
     uint objectIndex;
+    uint materialIndex;
 };
 [[vk::push_constant]] PushConsts pushConsts;
 
@@ -36,6 +38,7 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     float3 normal : NORMAL;
+    uint materialIndex : TEXCOORD0;
 };
 
 VertexOutput main(VertexInput input, uint vertexId : SV_VertexID)
@@ -44,7 +47,7 @@ VertexOutput main(VertexInput input, uint vertexId : SV_VertexID)
     float4x4 model = objectBuffer[pushConsts.objectIndex].model;
     float3x3 normalMatrix = objectBuffer[pushConsts.objectIndex].normal;
     output.position = mul(cameraData.proj, mul(cameraData.view, mul(model, float4(input.position, 1.0))));
-    // TODO: handle normal distortion caused by non-uniform scaling
     output.normal = normalize(mul(normalMatrix, input.normal));
+    output.materialIndex = pushConsts.materialIndex;
     return output;
 }
