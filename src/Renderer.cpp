@@ -223,6 +223,7 @@ namespace Felina
             MaterialData matData{};
             matData.albedo = mat->GetAlbedo();
             matData.specular = mat->GetSpecular();
+            matData.materialInfo = mat->GetCoefficients();
             materialDatas.push_back(matData);
 
             // Keep track of the storage buffer IDs

@@ -16,6 +16,7 @@ namespace Felina
 
         CreateAlbedoAttachment(device, allocCreateInfo);
         CreateSpecularAttachment(device, allocCreateInfo);
+        CreateMaterialInfoAttachment(device, allocCreateInfo);
         CreateNormalAttachment(device, allocCreateInfo);
         CreateDepthAttachment(device, allocCreateInfo);
 
@@ -67,6 +68,7 @@ namespace Felina
 
         CreateAlbedoAttachment(device, allocCreateInfo);
         CreateSpecularAttachment(device, allocCreateInfo);
+        CreateMaterialInfoAttachment(device, allocCreateInfo);
         CreateNormalAttachment(device, allocCreateInfo);
         CreateDepthAttachment(device, allocCreateInfo);
         CreateDescriptorSets(device, descriptorPool);
@@ -97,7 +99,7 @@ namespace Felina
     {
         vk::ImageCreateInfo imageCreateInfo{
             .imageType = vk::ImageType::e2D,
-            .format = vk::Format::eR16G16B16A16Sfloat, // RGB specular + A shininess
+            .format = vk::Format::eR8G8B8A8Unorm, // RGB specular + A shininess
             .extent = vk::Extent3D{ m_extent.width, m_extent.height, 1 },
             .mipLevels = 1,
             .arrayLayers = 1,
@@ -111,6 +113,27 @@ namespace Felina
         m_attachments.push_back({ 
             AttachmentType::Specular,
             std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo) 
+        });
+    }
+
+    void GBuffer::CreateMaterialInfoAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo)
+    {
+        vk::ImageCreateInfo imageCreateInfo{
+            .imageType = vk::ImageType::e2D,
+            .format = vk::Format::eR8G8B8A8Unorm, // Shininess must be rescaled in the shader
+            .extent = vk::Extent3D{ m_extent.width, m_extent.height, 1 },
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = vk::SampleCountFlagBits::e1,
+            .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+            .sharingMode = vk::SharingMode::eExclusive,
+            .initialLayout = vk::ImageLayout::eUndefined
+        };
+
+        m_attachments.push_back({
+            AttachmentType::MaterialInfo,
+            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo)
         });
     }
 

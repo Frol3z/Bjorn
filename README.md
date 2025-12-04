@@ -11,12 +11,13 @@ Its purpose is to provide a space for experimenting on topics such as real time 
 # Features
 - simple user interface
 - full deferred rendering pipeline
+- material system using Blinn-Phong lighting model
 # Roadmap
 ## Short term
-- material system and texture support
-- directional and point light support
+- texture support
+- multiple lights
 - improved UX
-- model loading
+- glTF loading
 ## Long term
 - PBR materials
 - cascaded shadow maps
@@ -52,7 +53,7 @@ cmake ..
 5. Set `Felina` as the **startup project** in Visual Studio.
 6. Build and run the project.
 
-# Class diagram
+# Architecture
 ![Diagram](diagram.png)
 
 # Examples

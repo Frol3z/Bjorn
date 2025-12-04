@@ -73,8 +73,17 @@ namespace Felina
 		auto sphereMeshID = rm.LoadMesh(std::move(sphereMesh), "Sphere Mesh", *m_renderer);
 
 		// Load materials
-		auto mat1 = std::make_unique<Material>(glm::vec3(0.5, 0.1, 0.5), glm::vec4(20.0, 20.0, 20.0, 0.0));
-		auto mat2 = std::make_unique<Material>(glm::vec3(0.1, 0.1, 0.1), glm::vec4(255.0, 255.0, 255.0, 32.0));
+		constexpr float ambient = 0.02f;
+		auto mat1 = std::make_unique<Material>(
+			glm::vec3(0.98, 0.1, 0.1), // Albedo
+			glm::vec3(0.1, 0.1, 0.1), // Specular
+			glm::vec4(ambient, 0.8, 0.05, 0.05) // Material info
+		);
+		auto mat2 = std::make_unique<Material>(
+			glm::vec3(0.1, 0.6, 0.7), // Albedo
+			glm::vec3(1.0, 1.0, 1.0), // Specular
+			glm::vec4(ambient, 0.2, 0.8, 0.8) // Material info
+		);
 		auto mat1ID = rm.LoadMaterial(std::move(mat1), "Opaque Material");
 		auto mat2ID = rm.LoadMaterial(std::move(mat2), "Shiny Material");
 
@@ -99,8 +108,10 @@ namespace Felina
 			glfwPollEvents();
 			ProcessInput();
 
+			if(glfwGetMouseButton(m_window->GetHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+				m_scene->RotateCamera(m_mouseDeltaX, m_mouseDeltaY);
+			
 			m_UI->Update(*m_scene);
-			m_scene->UpdateCamera(m_mouseDeltaX, m_mouseDeltaY);
 			m_renderer->DrawFrame();
 		}
 
@@ -138,17 +149,9 @@ namespace Felina
 		xpos /= m_window->GetWidth();
 		ypos /= m_window->GetHeight();
 
-		// Compute delta if MRB is being pressed
-		if (glfwGetMouseButton(m_window->GetHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
-		{
-			m_mouseDeltaX = (m_mouseX - xpos) * m_sensitivity;
-			m_mouseDeltaY = (m_mouseY - ypos) * m_sensitivity;
-		}
-		else
-		{
-			m_mouseDeltaX = 0.0;
-			m_mouseDeltaY = 0.0;
-		}
+		// Compute delta
+		m_mouseDeltaX = (m_mouseX - xpos) * m_sensitivity;
+		m_mouseDeltaY = (m_mouseY - ypos) * m_sensitivity;
 
 		// Update stored mouse position
 		m_mouseX = xpos;

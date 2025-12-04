@@ -37,7 +37,8 @@ namespace Felina
 			struct MaterialData
 			{
 				glm::vec3 albedo;
-				glm::vec4 specular; // A is Blinn-Phong shininess
+				glm::vec3 specular;
+				glm::vec4 materialInfo;
 			};
 
 			struct ObjectData

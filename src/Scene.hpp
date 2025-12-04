@@ -16,7 +16,7 @@ namespace Felina
 			Scene(float viewportWidth, float viewportHeight);
 			~Scene();
 
-			void UpdateCamera(double azimuth, double elevation) { m_camera.Rotate(azimuth, elevation); }
+			void RotateCamera(double azimuth, double elevation) { m_camera.Rotate(azimuth, elevation); }
 			Camera& GetCamera() { return m_camera; }
 			const Camera& GetCamera() const { return m_camera; }
 
