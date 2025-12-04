@@ -56,6 +56,14 @@ cmake ..
 # Architecture
 ![Diagram](diagram.png)
 
+## GBuffer structure
+| Attachment # | R | G | B | A |
+|---|---|---|---|---|
+| 0 | Albedo.R | Albedo.G | Albedo.B | Unused |
+| 1 | Specular.R | Specular.G | Specular.B | Unused|
+| 2 | Ambient Coeff. | Diffuse Coeff. | Specular Coeff. | Unused |
+| 3 | Normal.X | Normal.Y | Normal.Z | Unused |
+| 4 | Depth | Depth | Depth | Depth |
 # Examples
 
 # References
