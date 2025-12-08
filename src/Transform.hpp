@@ -17,6 +17,7 @@ namespace Felina
 		void SetPosition(const glm::vec3& position);
 		void SetRotation(const glm::quat& rotation);
 		void SetScale(const glm::vec3& scale);
+		void SetMatrix(const glm::mat4& matrix);
 
 		const glm::vec3& GetPosition() const { return m_position; }
 		const glm::quat& GetRotation() const { return m_rotation; }

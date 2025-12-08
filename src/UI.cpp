@@ -34,31 +34,47 @@ namespace Felina
 	void UI::DrawHierarchy(Scene& scene)
 	{
 		ImGui::Begin("Hierarchy");
-		ImGuiTreeNodeFlags baseFlags =
-			ImGuiTreeNodeFlags_OpenOnArrow |
-			ImGuiTreeNodeFlags_OpenOnDoubleClick |
-			ImGuiTreeNodeFlags_SpanAvailWidth |
-			ImGuiTreeNodeFlags_Leaf |
-			ImGuiTreeNodeFlags_NoTreePushOnOpen;
-		size_t i = 0;
-		for (auto obj : scene.GetObjects())
+		size_t idx = 0; // Same reference trick used in Renderer.cpp
+		for (const auto& obj : scene.GetObjects())
 		{
-			const bool isSelected = (m_hierarchySelection == obj);
-			ImGuiTreeNodeFlags flags = baseFlags | (isSelected ? ImGuiTreeNodeFlags_Selected : 0);
-			ImGui::TreeNodeEx((void*)(intptr_t)i, flags, obj->GetName().c_str());
-			if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-			{
-				m_hierarchySelection = obj;
-
-				// Initialize inspector values
-				Transform& t = obj->GetTransform();
-				m_displayedPosition = t.GetPosition();
-				m_displayedRotation = glm::degrees(glm::eulerAngles(t.GetRotation()));
-				m_displayedScale = t.GetScale();
-			}
-			i++;
+			DrawHierarchyObject(obj.get(), idx);
 		}
 		ImGui::End();
+	}
+
+	void UI::DrawHierarchyObject(Object* obj, size_t& idx)
+	{
+		bool isLeaf = obj->GetChildren().empty();
+		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow
+			| ImGuiTreeNodeFlags_OpenOnDoubleClick
+			| ImGuiTreeNodeFlags_SpanAvailWidth
+			| ImGuiTreeNodeFlags_DrawLinesFull
+			| (isLeaf ? ImGuiTreeNodeFlags_Leaf : 0)
+			| ((m_hierarchySelection == obj) ? ImGuiTreeNodeFlags_Selected : 0);
+		
+		bool isNodeOpen = ImGui::TreeNodeEx((void*)(intptr_t)idx, flags, obj->GetName().c_str());
+		
+		// Handle selection
+		if (ImGui::IsItemClicked())
+		{
+			m_hierarchySelection = obj;
+
+			// Initialize inspector values
+			m_displayedPosition = obj->GetPosition();
+			m_displayedRotation = glm::degrees(glm::eulerAngles(obj->GetRotation()));
+			m_displayedScale = obj->GetScale();
+		}
+		
+		// Increment the index AFTER drawing the object
+		++idx;
+
+		// If the node is open iterate recursively through its children
+		if (isNodeOpen)
+		{
+			for (const auto& child : obj->GetChildren())
+				DrawHierarchyObject(child.get(), idx);
+			ImGui::TreePop();
+		}
 	}
 
 	void UI::DrawInspector()
@@ -70,22 +86,20 @@ namespace Felina
 
 			// Transform
 			// TODO: highlight in the UI that this is the transform-dedicated section
-			Transform& t = m_hierarchySelection->GetTransform();
-
 			if (ImGui::DragFloat3("Position", &m_displayedPosition.x, 0.01f))
 			{
-				t.SetPosition(m_displayedPosition);
+				m_hierarchySelection->SetPosition(m_displayedPosition);
 			}
 
 			if (ImGui::DragFloat3("Rotation", &m_displayedRotation.x, 1.0f))
 			{
 				glm::quat targetRotation = glm::quat(glm::radians(m_displayedRotation));
-				t.SetRotation(targetRotation);
+				m_hierarchySelection->SetRotation(targetRotation);
 			}
 
 			if (ImGui::DragFloat3("Scale", &m_displayedScale.x, 0.01f))
 			{
-				t.SetScale(m_displayedScale);
+				m_hierarchySelection->SetScale(m_displayedScale);
 			}
 
 			// Mesh

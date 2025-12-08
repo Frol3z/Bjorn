@@ -33,10 +33,10 @@ if(MSVC)
 endif()
 
 # GLM defines specified here to avoid forgetting to define them each time a glm include is needed
-add_compile_definitions(GLM_FORCE_DEFAULT_ALIGNED_GENTYPES GLM_FORCE_DEPTH_ZERO_TO_ONE)
+add_compile_definitions(GLM_FORCE_DEFAULT_ALIGNED_GENTYPES GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_ENABLE_EXPERIMENTAL)
 
 # Includes
-target_include_directories(Felina PRIVATE ${VMA_SOURCE_DIR}/include ${IMGUI_SOURCE_DIR})
+target_include_directories(Felina PRIVATE ${VMA_SOURCE_DIR}/include ${IMGUI_SOURCE_DIR} ${TINYGLTF_SOURCE_DIR})
 
 # Libraries
 target_link_libraries(Felina PRIVATE

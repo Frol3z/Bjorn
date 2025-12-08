@@ -5,13 +5,13 @@
 #include "UI.hpp"
 #include "Scene.hpp"
 #include "Renderer.hpp"
+#include "Common.hpp"
+#include "GltfLoader.hpp"
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
-
-#include <iostream>
 
 namespace Felina 
 {
@@ -22,7 +22,7 @@ namespace Felina
 
 		m_window = std::make_unique<Window>(windowWidth, windowHeight, m_name, *this);
 		m_UI = std::make_unique<UI>();
-		m_scene = std::make_unique<Scene>(windowWidth, windowHeight);
+		m_scene = std::make_unique<Scene>(static_cast<float>(windowWidth), static_cast<float>(windowHeight));
 		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
 
 		InitImGui();
@@ -56,23 +56,9 @@ namespace Felina
 	}
 
 	void Application::InitScene()
-	{
-		// NOTE: COORDINATE SYSTEM
-		// X -> right
-		// Y -> forward
-		// Z -> up
-
-		// Set camera position
-		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f));
-		
-		// Load basic meshes (cube, sphere and quad)
-		auto& rm = ResourceManager::GetInstance();
-		auto cubeMesh = std::make_unique<Mesh>(Mesh::Type::CUBE);
-		auto sphereMesh = std::make_unique<Mesh>(Mesh::Type::SPHERE);
-		auto cubeMeshID = rm.LoadMesh(std::move(cubeMesh), "Cube Mesh", *m_renderer);
-		auto sphereMeshID = rm.LoadMesh(std::move(sphereMesh), "Sphere Mesh", *m_renderer);
-
+	{		
 		// Load materials
+		auto& rm = ResourceManager::GetInstance();
 		constexpr float ambient = 0.02f;
 		auto mat1 = std::make_unique<Material>(
 			glm::vec3(0.98, 0.1, 0.1), // Albedo
@@ -87,19 +73,13 @@ namespace Felina
 		auto mat1ID = rm.LoadMaterial(std::move(mat1), "Opaque Material");
 		auto mat2ID = rm.LoadMaterial(std::move(mat2), "Shiny Material");
 
-		// Create one cube
-		auto obj = std::make_unique<Object>("Cube", cubeMeshID, mat1ID);
-		Transform& t = obj->GetTransform();
-		t.Rotate(glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		t.Translate(glm::vec3(-1.0f, 0.0f, 0.0f));
-		m_scene->AddObject(std::move(obj));
+		// Load default scene
+		LoadSceneFromGlTF("./assets/default.glb", *m_scene, *m_renderer);
+		// TODO: include camera in the glTF
+		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f));
 
-		// Create second cube
-		auto obj2 = std::make_unique<Object>("Sphere", sphereMeshID, mat2ID);
-		Transform& t2 = obj2->GetTransform();
-		t2.Rotate(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		t2.Translate(glm::vec3(1.0f, 0.0f, 0.0f));
-		m_scene->AddObject(std::move(obj2));
+		// TODO: remove
+		//PrintSceneHierarchy(*m_scene);
 	}
 
 	void Application::MainLoop() 

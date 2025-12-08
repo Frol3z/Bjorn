@@ -1,10 +1,6 @@
 ﻿cmake_minimum_required(VERSION 4.0)
 
-project(
-    Felina
-    LANGUAGES CXX
-    VERSION 1.0
-)
+project(Felina VERSION 1.0 LANGUAGES CXX)
 
 # Force C++20 standard
 set(CMAKE_CXX_STANDARD 20)
@@ -37,6 +33,7 @@ add_subdirectory(src)
 
 # Then additional resources
 add_subdirectory(shaders)
-add_dependencies(Felina Shaders)
+add_subdirectory(assets)
+add_dependencies(Felina Shaders Assets)
 
 

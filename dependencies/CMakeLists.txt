@@ -31,3 +31,11 @@ FetchContent_Declare(
     GIT_TAG e7d2d636affeeac1fc7175fb13472ca02d1bc0d1 # v1.92.4-docking
 )
 add_subdirectory(imgui)
+
+# tinygltf
+FetchContent_Declare(
+    tinygltf
+    GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
+    GIT_TAG 81bd50c1062fdb956e878efa2a9234b2b9ec91ec # v2.9.7
+)
+add_subdirectory(tinygltf)
