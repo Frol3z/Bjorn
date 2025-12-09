@@ -5,7 +5,6 @@
 #include "UI.hpp"
 #include "Scene.hpp"
 #include "Renderer.hpp"
-#include "Common.hpp"
 #include "GltfLoader.hpp"
 
 #include <GLFW/glfw3.h>
@@ -56,7 +55,8 @@ namespace Felina
 	}
 
 	void Application::InitScene()
-	{		
+	{	
+		/*
 		// Load materials
 		auto& rm = ResourceManager::GetInstance();
 		constexpr float ambient = 0.02f;
@@ -72,14 +72,11 @@ namespace Felina
 		);
 		auto mat1ID = rm.LoadMaterial(std::move(mat1), "Opaque Material");
 		auto mat2ID = rm.LoadMaterial(std::move(mat2), "Shiny Material");
+		*/
 
 		// Load default scene
 		LoadSceneFromGlTF("./assets/default.glb", *m_scene, *m_renderer);
-		// TODO: include camera in the glTF
-		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f));
-
-		// TODO: remove
-		//PrintSceneHierarchy(*m_scene);
+		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f)); // TODO: include camera in the glTF
 	}
 
 	void Application::MainLoop() 

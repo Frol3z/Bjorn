@@ -148,15 +148,14 @@ namespace Felina
 		std::unordered_map<int, MeshID>& meshes, std::unordered_map<int, MaterialID>& materials
 	)
 	{
+		assert(node.mesh != -1 && "[GltfLoader] Node without a mesh found!");
+
 		// Retrieve resource IDs
 		MeshID meshId = meshes[node.mesh];
+		tinygltf::Mesh& mesh = model.meshes[node.mesh];
+		MaterialID materialId = materials[mesh.primitives[0].material]; // Strong assumption
 
-		// PROBLEM:
-		// One object MAY contain one mesh
-		// One mesh can map to many primitives, that is a Felina::Object can be mapped to many Felina::Mesh
-
-		// TODO: read material data from the glTF file
-		std::unique_ptr<Object> obj = std::make_unique<Object>(node.name, meshId, static_cast<MaterialID>(0), parent);
+		std::unique_ptr<Object> obj = std::make_unique<Object>(node.name, meshId, materialId, parent);
 
 		// Apply transform
 		// Transform -> see p.18 of glTF specs
@@ -209,7 +208,7 @@ namespace Felina
 
 		// Load all materials
 		std::unordered_map<int, MaterialID> materials;
-		//LoadMaterials(model, materials);
+		LoadMaterials(model, materials);
 
 		// Iterate through each top-level node (parent = nullptr)
 		for (const auto nodeIdx : model.scenes[model.defaultScene].nodes)

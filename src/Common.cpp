@@ -1,10 +1,5 @@
 #include "Common.hpp"
 
-#include "Scene.hpp"
-#include "Renderer.hpp"
-
-#include <tiny_gltf.h>
-
 #include <fstream>
 
 namespace Felina
@@ -24,19 +19,4 @@ namespace Felina
 
         return buffer;
     }
-
-	static void PrintObject(const std::unique_ptr<Object>& object, uint16_t depth)
-	{
-		for (size_t i = 0; i < depth; i++)
-			PRINT('\t');
-		PRINTLN(object->GetName());
-		for (const auto& child : object->GetChildren())
-			PrintObject(child, depth + 1);
-	}
-
-	void PrintSceneHierarchy(const Scene& scene)
-	{
-		for (const auto& obj : scene.GetObjects())
-			PrintObject(obj, 0);
-	}
 }

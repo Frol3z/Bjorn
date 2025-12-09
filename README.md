@@ -2,22 +2,26 @@
 
 ![Renderer](rendering.png)
 
-Felina is a Vulkan renderer written in C++.
+Felina is a 3D renderer, i.e. a piece of software which takes a scene description as input and produces pretty visuals as output. 
+It is written in C++20 and uses Vulkan 1.4 under the hood.
 
-Initially started as a simple project with the goal of learning the Vulkan API, 
-it has since evolved into a small (relatively speaking) framework which is actively being extended. 
-Its purpose is to provide a space for experimenting on topics such as real time rendering and game development.
+This project started as a way of learning the Vulkan API and getting some hands-on experience on C++, 
+then it became more of a tool to study and experiment with real-time rendering techniques that pique my interests. 
+Sometimes some quality of life features outside of real-time rendering are added to improve the user experience, 
+e.g. basic user interface, abstractions, etc.
+
+Currently I'm working on adding texture supports on my materials.
 
 # Features
 - simple user interface
 - full deferred rendering pipeline
 - material system using Blinn-Phong lighting model
+- glTF scene loading
 # Roadmap
 ## Short term
 - texture support
 - multiple lights
-- improved UX
-- glTF loading
+- improve UX
 ## Long term
 - PBR materials
 - cascaded shadow maps
@@ -33,6 +37,7 @@ Its purpose is to provide a space for experimenting on topics such as real time 
 - [GLM 1.0.1](https://github.com/g-truc/glm)
 - [Vulkan Memory Allocator 3.3.0](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
 - [Dear ImGui 1.92.4 (docking)](https://github.com/ocornut/imgui)
+- [tinygltf 2.9.7](https://github.com/syoyo/tinygltf)
 ## Build instructions
 ### Windows
 1. Clone this repository:

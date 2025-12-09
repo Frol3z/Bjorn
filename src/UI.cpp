@@ -1,12 +1,11 @@
 #include "UI.hpp"
 
 #include "Scene.hpp"
+#include "Common.hpp"
 
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
-
-#include <iostream>
 
 namespace Felina
 {
@@ -49,6 +48,7 @@ namespace Felina
 			| ImGuiTreeNodeFlags_OpenOnDoubleClick
 			| ImGuiTreeNodeFlags_SpanAvailWidth
 			| ImGuiTreeNodeFlags_DrawLinesFull
+			| ImGuiTreeNodeFlags_DefaultOpen
 			| (isLeaf ? ImGuiTreeNodeFlags_Leaf : 0)
 			| ((m_hierarchySelection == obj) ? ImGuiTreeNodeFlags_Selected : 0);
 		
