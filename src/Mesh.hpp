@@ -34,7 +34,8 @@ namespace Felina
 		public:
 			enum Type { CUBE = 0, SPHERE };
 		public:
-			Mesh(Mesh::Type type);
+			Mesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
+			Mesh(Mesh::Type type); // Procedurally generate a mesh based on type
 			~Mesh();
 
 			void Load(Device& device);
@@ -50,7 +51,7 @@ namespace Felina
 			};
 
 			size_t GetIndexBufferSize() const { return m_indices.size(); };
-			vk::IndexType GetIndexType() const { return vk::IndexType::eUint16; };
+			vk::IndexType GetIndexType() const { return vk::IndexType::eUint32; };
 
 		private:
 			void CreateCubeMesh();
@@ -62,7 +63,7 @@ namespace Felina
 			void CreateIndexBuffer(Device& device, vk::DeviceSize size);
 
 			std::vector<Vertex> m_vertices;
-			std::vector<uint16_t> m_indices;
+			std::vector<uint32_t> m_indices;
 
 			std::unique_ptr<Buffer> m_stagingBuffer = nullptr;
 			std::unique_ptr<Buffer> m_vertexBuffer = nullptr;

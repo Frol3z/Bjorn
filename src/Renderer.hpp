@@ -21,6 +21,7 @@ namespace Felina
 	class Buffer;
 	class Window;
 	class Scene;
+	class Object;
 	class Mesh;
 
 	class Renderer
@@ -103,6 +104,7 @@ namespace Felina
 			void CreateDescriptorSets();
 			void CreateSyncObjects();
 
+			void DrawObject(const Object& obj, uint32_t& idx);
 			void RecordCommandBuffer(uint32_t imageIndex);
 			void TransitionImageLayout(
 				vk::Image image,

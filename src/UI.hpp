@@ -16,6 +16,7 @@ namespace Felina
 
 		private:
 			void DrawHierarchy(Scene& scene);
+			void DrawHierarchyObject(Object* object, size_t& idx);
 			void DrawInspector();
 
 			Object* m_hierarchySelection = nullptr;

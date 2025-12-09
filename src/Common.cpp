@@ -4,12 +4,12 @@
 
 namespace Felina
 {
-    std::vector<char> ReadFile(const std::string& filename)
+    std::vector<char> ReadFile(const std::string& filepath)
     {
         // Read starting from the end to determine the size of the file
-        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+        std::ifstream file(filepath, std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
-            throw std::runtime_error("Failed to open file: " + filename);
+            throw std::runtime_error("Failed to open file: " + filepath);
         }
 
         std::vector<char> buffer(file.tellg());

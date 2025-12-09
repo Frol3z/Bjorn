@@ -5,6 +5,11 @@
 
 namespace Felina
 {
+    Mesh::Mesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
+        : m_vertices(vertices), m_indices(indices)
+    {
+    }
+
     Mesh::Mesh(Mesh::Type type)
     {
         switch (type)

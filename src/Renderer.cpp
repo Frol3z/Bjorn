@@ -186,6 +186,22 @@ namespace Felina
         ImGui_ImplVulkan_RenderDrawData(drawData, *m_commandBuffers[m_currentFrame]);
     }
 
+    static void UpdateObject(const Object& obj, std::vector<Renderer::ObjectData>& objectDatas)
+    {
+        // Add current object data
+        objectDatas.emplace_back(Renderer::ObjectData{
+            .model = obj.GetModelMatrix(),
+            .normal = obj.GetNormalMatrix()
+        });
+
+        // Iterate through its children
+        for (const auto& childPtr : obj.GetChildren())
+        {
+            const Object& child = *childPtr;
+            UpdateObject(child, objectDatas);
+        }
+    }
+
     void Renderer::UpdateFrameData()
     {   
         // Update camera data
@@ -197,16 +213,12 @@ namespace Felina
         m_cameraUBOs[m_currentFrame]->LoadData(&cameraData, sizeof(cameraData));
 
         // Fill the object data storage buffer
-        std::vector<Object*> objects = m_scene.GetObjects();
+        const std::vector<std::unique_ptr<Object>>& objects = m_scene.GetObjects();
         std::vector<ObjectData> objectDatas;
-        for (Object* obj : objects)
+        for (const auto& objPtr : objects)
         {
-            // Object data
-            ObjectData objData{};
-            objData.model = obj->GetModelMatrix();
-            // TODO: avoid recomputing the normal matrix each frame when it's not mandatory (inverse computation)
-            objData.normal = obj->GetNormalMatrix();
-            objectDatas.push_back(objData);
+            const Object& obj = *objPtr;
+            UpdateObject(obj, objectDatas);
         }
         m_objectSSBOs[m_currentFrame]->LoadData(objectDatas.data(), objectDatas.size() * sizeof(ObjectData));
 
@@ -626,6 +638,40 @@ namespace Felina
         }
     }
 
+    void Renderer::DrawObject(const Object& obj, uint32_t& idx)
+    {
+        // Draw the object
+        // Update push const
+        ObjectPushConst pc{
+            .objectIndex = idx,
+            .materialIndex = m_materialIDToSSBOID[m_currentFrame][obj.GetMaterial()]
+        };
+        m_commandBuffers[m_currentFrame].pushConstants(
+            *m_defGeometryPipelineLayout,
+            vk::ShaderStageFlagBits::eVertex,
+            0,
+            vk::ArrayProxy<const ObjectPushConst>(1, &pc)
+        );
+
+        // Bind vertex and index buffer
+        auto& mesh = ResourceManager::GetInstance().GetMesh(obj.GetMesh());
+        m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
+        m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
+
+        // Draw call
+        m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
+
+        // Increment index AFTER drawing the object
+        ++idx;
+
+        // Iterate through its children
+        for (const auto& childPtr : obj.GetChildren())
+        {
+            const Object& child = *childPtr;
+            DrawObject(child, idx);
+        }
+    }
+
     void Renderer::RecordCommandBuffer(uint32_t imageIndex)
     {
         auto& cmdBuf = m_commandBuffers[m_currentFrame];
@@ -717,30 +763,13 @@ namespace Felina
         );
 
         // Draw all the objects
-        std::vector<Object*> objects = m_scene.GetObjects();
-        for (uint32_t i = 0; i < objects.size(); i++)
+        // Referenced index used to point each object
+        // to the correct data it needs (depth-first traversal)
+        uint32_t idx = 0;
+        for (const auto& objPtr : m_scene.GetObjects())
         {
-            Object* obj = objects[i];
-
-            // Update push const
-            ObjectPushConst pc{
-                .objectIndex = i,
-                .materialIndex = m_materialIDToSSBOID[m_currentFrame][obj->GetMaterial()]
-            };
-            m_commandBuffers[m_currentFrame].pushConstants(
-                *m_defGeometryPipelineLayout,
-                vk::ShaderStageFlagBits::eVertex,
-                0,
-                vk::ArrayProxy<const ObjectPushConst>(1, &pc)
-            );
-
-            // Bind vertex and index buffer
-            auto& mesh = ResourceManager::GetInstance().GetMesh(obj->GetMesh());
-            m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
-            m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
-
-            // Draw call
-            m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
+            const Object& obj = *objPtr;
+            DrawObject(obj, idx);
         }
 
         cmdBuf.endRendering();

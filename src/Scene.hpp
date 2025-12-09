@@ -20,12 +20,12 @@ namespace Felina
 			Camera& GetCamera() { return m_camera; }
 			const Camera& GetCamera() const { return m_camera; }
 
+			// TODO: update
 			void AddObject(std::unique_ptr<Object> object);
-			const Object& GetObject(const std::string& name) const;
-			std::vector<Object*> GetObjects() const;
+			const std::vector<std::unique_ptr<Object>>& GetObjects() const { return m_objects; }
 
 		private:
 			Camera m_camera;
-			std::unordered_map<std::string, std::unique_ptr<Object>> m_objects;
+			std::vector<std::unique_ptr<Object>> m_objects; // Top-level objects
 	};
 }

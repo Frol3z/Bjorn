@@ -16,6 +16,6 @@ namespace Felina
 		private:
 			glm::vec3 m_albedo;
 			glm::vec3 m_specular;
-			glm::vec4 m_coefficients; // R:kI, G:kD, B:kS, A:shininess
+			glm::vec4 m_coefficients; // R:kA, G:kD, B:kS, A:shininess
 	};
 }

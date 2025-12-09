@@ -1,6 +1,6 @@
 #include "Transform.hpp"
 
-#include <iostream>
+#include <glm/gtx/matrix_decompose.hpp>
 
 namespace Felina
 {
@@ -42,6 +42,17 @@ namespace Felina
 	{
 		m_scale = scale;
 		UpdateMatrix();
+	}
+
+	void Transform::SetMatrix(const glm::mat4& matrix)
+	{
+		m_matrix = matrix;
+		
+		glm::vec3 skew;
+		glm::vec4 perspective;
+		glm::decompose(matrix, m_scale, m_rotation, m_position, skew, perspective);
+
+		m_rotation = glm::normalize(m_rotation);
 	}
 
 	void Transform::UpdateMatrix()
