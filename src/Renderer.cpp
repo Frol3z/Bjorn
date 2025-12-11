@@ -81,7 +81,9 @@ namespace Felina
         }
 
         // Acquire next image index and signal the semaphore when done
-        auto [result, imageIndex] = m_swapchain->AcquireNextImage(*m_imageAvailableSemaphores[m_currentFrame]);
+        auto resultStruct = m_swapchain->AcquireNextImage(*m_imageAvailableSemaphores[m_currentFrame]);
+        auto result = resultStruct.result; // vulkan.hpp changed their return value from std::pair
+        auto imageIndex = resultStruct.value; // to a custom struct
 
         // Check if the surface is still compatible with the swapchain or if it was resized/minimized
         // !!! Checking m_IsFramebufferResized guarantees prevents presentation to an invalid surface

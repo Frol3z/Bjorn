@@ -1,6 +1,16 @@
 # Source files
 file(GLOB FELINA_SRC_FILES "*.cpp" "*.hpp")
 
+# Search for installed Vulkan SDK
+find_package(Vulkan REQUIRED)
+
+# Vulkan dependency
+add_compile_definitions(
+    VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+    VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1
+    VULKAN_HPP_NO_MODULE
+)
+
 # Dear ImGui integration
 file(GLOB IMGUI_ROOT_SRC_FILES "${IMGUI_SOURCE_DIR}/*.cpp" "${IMGUI_SOURCE_DIR}/*.h")
 set(IMGUI_BACKENDS_SRC_FILES 
@@ -36,11 +46,16 @@ endif()
 add_compile_definitions(GLM_FORCE_DEFAULT_ALIGNED_GENTYPES GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_ENABLE_EXPERIMENTAL)
 
 # Includes
-target_include_directories(Felina PRIVATE ${VMA_SOURCE_DIR}/include ${IMGUI_SOURCE_DIR} ${TINYGLTF_SOURCE_DIR})
+target_include_directories(Felina PRIVATE 
+    ${VMA_SOURCE_DIR}/include 
+    ${IMGUI_SOURCE_DIR} 
+    ${TINYGLTF_SOURCE_DIR}
+    ${Vulkan_INCLUDE_DIR}
+)
 
 # Libraries
 target_link_libraries(Felina PRIVATE
-    Vulkan::cppm
+    Vulkan::Vulkan
     glfw
     glm::glm
 )

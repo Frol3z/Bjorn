@@ -14,7 +14,7 @@ namespace Felina
 			Swapchain(const Device& device, const Window& window, const vk::raii::SurfaceKHR& surface);
 
 			void Recreate();
-			std::pair<vk::Result, uint32_t> AcquireNextImage(const vk::Semaphore& s);
+			vk::ResultValue<uint32_t> AcquireNextImage(const vk::Semaphore& s);
 
 			const vk::SwapchainKHR& GetHandle() const { return *m_swapchain; }
 			const vk::SurfaceFormatKHR& GetSurfaceFormat() const { return m_swapchainSurfaceFormat; }
