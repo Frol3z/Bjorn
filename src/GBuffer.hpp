@@ -3,11 +3,11 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <vk_mem_alloc.h>
 
-#include "Image.hpp"
+#include "Texture.hpp"
 
 namespace Felina
 {
-	class Image;
+	class Texture;
 	class Device;
 
 	class GBuffer
@@ -17,7 +17,7 @@ namespace Felina
 			struct Attachment
 			{
 				AttachmentType type;
-				std::unique_ptr<Image> image = nullptr;
+				std::unique_ptr<Texture> image = nullptr;
 			};
 
 			GBuffer(

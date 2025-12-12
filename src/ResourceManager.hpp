@@ -2,14 +2,15 @@
 
 #include "Mesh.hpp"
 #include "Material.hpp"
+#include "Texture.hpp"
 
 #include <unordered_map>
-#include <iostream>
 
 namespace Felina
 {
 	using MeshID = uint32_t;
 	using MaterialID = uint32_t;
+	using TextureID = uint32_t;
 
 	class Renderer;
 
@@ -34,6 +35,10 @@ namespace Felina
 
 			MeshID LoadMesh(std::unique_ptr<Mesh> mesh, const std::string& name, Renderer& renderer);
 			MaterialID LoadMaterial(std::unique_ptr<Material> material, const std::string& name);
+			TextureID LoadTexture(std::unique_ptr<Texture> texture, const std::string& name,
+				const void* rawImageData, size_t rawImageSize,
+				Renderer& renderer
+			);
 			void UnloadAll();
 
 			const Mesh& GetMesh(MeshID id) const;
@@ -45,9 +50,14 @@ namespace Felina
 		private:
 			ResourceManager(){} // Private constructor
 
+			// Resources
 			std::unordered_map<MeshID, Resource<Mesh>> m_meshes;
 			std::unordered_map<MaterialID, Resource<Material>> m_materials;
+			std::unordered_map<TextureID, Resource<Texture>> m_textures;
+
+			// Id counters
 			MeshID m_meshID{ 0 };
 			MaterialID m_materialID{ 0 };
+			TextureID m_textureID{ 0 };
 	};
 }

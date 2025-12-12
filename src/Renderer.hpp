@@ -80,6 +80,7 @@ namespace Felina
 			void DrawFrame();
 			void WaitIdle();
 			void LoadMesh(Mesh& mesh);
+			void LoadTexture(const Texture& texture, const void* rawImageData, size_t rawImageSize);
 
 			// Dear ImGui
 			ImGui_ImplVulkan_InitInfo GetImGuiInitInfo();

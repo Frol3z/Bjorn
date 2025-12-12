@@ -91,7 +91,7 @@ namespace Felina
 
         m_attachments.push_back({
             AttachmentType::Albedo,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo)
+            std::make_unique<Texture>(device, imageCreateInfo, allocCreateInfo)
         });
     }
 
@@ -112,7 +112,7 @@ namespace Felina
 
         m_attachments.push_back({ 
             AttachmentType::Specular,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo) 
+            std::make_unique<Texture>(device, imageCreateInfo, allocCreateInfo) 
         });
     }
 
@@ -133,7 +133,7 @@ namespace Felina
 
         m_attachments.push_back({
             AttachmentType::MaterialInfo,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo)
+            std::make_unique<Texture>(device, imageCreateInfo, allocCreateInfo)
         });
     }
 
@@ -154,7 +154,7 @@ namespace Felina
 
         m_attachments.push_back({
             AttachmentType::Normal,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo)
+            std::make_unique<Texture>(device, imageCreateInfo, allocCreateInfo)
         });
     }
 
@@ -175,7 +175,7 @@ namespace Felina
 
         m_attachments.push_back({
             AttachmentType::Depth,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo)
+            std::make_unique<Texture>(device, imageCreateInfo, allocCreateInfo)
         });
     }
 

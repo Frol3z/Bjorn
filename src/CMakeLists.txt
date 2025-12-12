@@ -4,7 +4,7 @@ file(GLOB FELINA_SRC_FILES "*.cpp" "*.hpp")
 # Search for installed Vulkan SDK
 find_package(Vulkan REQUIRED)
 
-# Vulkan dependency
+# Vulkan definitions
 add_compile_definitions(
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1

@@ -1,10 +1,10 @@
-#include "Image.hpp"
+#include "Texture.hpp"
 
 #include "Device.hpp"
 
 namespace Felina
 {
-	Image::Image(const Device& device, const vk::ImageCreateInfo& imageInfo, const VmaAllocationCreateInfo& allocInfo)
+	Texture::Texture(const Device& device, const vk::ImageCreateInfo& imageInfo, const VmaAllocationCreateInfo& allocInfo)
 		: m_allocator(device.GetAllocator())
 	{
 		// Image
@@ -20,14 +20,14 @@ namespace Felina
 		if (res != VK_SUCCESS)
 			throw std::runtime_error("[IMAGE] vmaCreateImage: " + std::to_string(res));
 
+		m_imageCreateInfo = imageInfo;
 		m_image = vk::Image(raw);
-		m_format = imageInfo.format;
 
 		// Image View
-		CreateImageView(device, imageInfo);
+		CreateImageView(device);
 	}
 
-	Image::~Image()
+	Texture::~Texture()
 	{
 		if (m_image && m_allocation)
 		{
@@ -38,26 +38,26 @@ namespace Felina
 		}
 	}
 
-	void Image::CreateImageView(const Device& device, const vk::ImageCreateInfo& imageInfo)
+	void Texture::CreateImageView(const Device& device)
 	{
 		vk::ImageViewCreateInfo imageViewCreateInfo{};
 		imageViewCreateInfo.image = m_image;
-		imageViewCreateInfo.format = m_format;
+		imageViewCreateInfo.format = m_imageCreateInfo.format;
 
 		// .viewType
 		// NOTE: may be updated/moved if more complex combinations are needed
-		switch (imageInfo.imageType)
+		switch (m_imageCreateInfo.imageType)
 		{
 			case vk::ImageType::e1D:
 				imageViewCreateInfo.viewType =
-					imageInfo.arrayLayers > 1 ?
+					m_imageCreateInfo.arrayLayers > 1 ?
 					vk::ImageViewType::e1DArray :
 					vk::ImageViewType::e1D;
 				break;
 
 			case vk::ImageType::e2D:
 				imageViewCreateInfo.viewType =
-					imageInfo.arrayLayers > 1 ?
+					m_imageCreateInfo.arrayLayers > 1 ?
 					vk::ImageViewType::e2DArray :
 					vk::ImageViewType::e2D;
 				break;
@@ -70,13 +70,13 @@ namespace Felina
 
 		// .subresourceRange
 		vk::ImageAspectFlags aspect{};
-		if (imageInfo.usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
+		if (m_imageCreateInfo.usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
 		{
 			// Add depth buffer
 			aspect |= vk::ImageAspectFlagBits::eDepth;
 			
 			// Add stencil buffer as well if needed
-			if (m_format == vk::Format::eD32SfloatS8Uint || m_format == vk::Format::eD24UnormS8Uint)
+			if (m_imageCreateInfo.format == vk::Format::eD32SfloatS8Uint || m_imageCreateInfo.format == vk::Format::eD24UnormS8Uint)
 				aspect |= vk::ImageAspectFlagBits::eStencil;
 		}
 		else
@@ -87,11 +87,12 @@ namespace Felina
 		imageViewCreateInfo.subresourceRange = vk::ImageSubresourceRange{
 			aspect,
 			0,						// baseMipLevel                
-			imageInfo.mipLevels,
+			m_imageCreateInfo.mipLevels,
 			0,						// baseArrayLayer                
-			imageInfo.arrayLayers
+			m_imageCreateInfo.arrayLayers
 		};
 
+		m_imageViewCreateInfo = imageViewCreateInfo;
 		m_imageView = vk::raii::ImageView(device.GetDevice(), imageViewCreateInfo);
 	}
 }

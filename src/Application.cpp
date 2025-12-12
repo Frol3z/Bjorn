@@ -77,6 +77,10 @@ namespace Felina
 		// Load default scene
 		LoadSceneFromGlTF("./assets/default.glb", *m_scene, *m_renderer);
 		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f)); // TODO: include camera in the glTF
+
+		// TESTING TEXTURE LOADING
+		// Load an image with stb, load it and prey
+		
 	}
 
 	void Application::MainLoop() 

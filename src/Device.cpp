@@ -1,6 +1,7 @@
 #include "Device.hpp"
 
 #include "Buffer.hpp"
+#include "Texture.hpp"
 
 #include <iostream>
 #include <set>
@@ -28,7 +29,8 @@ namespace Felina
     void Device::CopyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, vk::DeviceSize size)
     {
         // Short-lived command buffer allocation
-        vk::CommandBufferAllocateInfo allocInfo {
+        vk::CommandBufferAllocateInfo allocInfo
+        {
             .commandPool = m_immediateCommandPool,
             .level = vk::CommandBufferLevel::ePrimary,
             .commandBufferCount = 1
@@ -43,6 +45,74 @@ namespace Felina
         // Submit to queue and wait for completion
         m_graphicsQueue.submit(
             vk::SubmitInfo {
+            .commandBufferCount = 1,
+            .pCommandBuffers = &*cmdBuffer
+            },
+            nullptr
+        );
+        m_graphicsQueue.waitIdle();
+    }
+
+    void Device::CopyBufferToImage(const Buffer& src, const Texture& dst, vk::DeviceSize size)
+    {
+        // Short-lived command buffer allocation
+        vk::CommandBufferAllocateInfo allocInfo
+        {
+            .commandPool = m_immediateCommandPool,
+            .level = vk::CommandBufferLevel::ePrimary,
+            .commandBufferCount = 1
+        };
+        vk::raii::CommandBuffer cmdBuffer = std::move(m_device.allocateCommandBuffers(allocInfo).front());
+
+        // Record commands
+        cmdBuffer.begin(vk::CommandBufferBeginInfo{ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+        
+        // Transition from undefined image layout to transfer dst layout using an ImageMemoryBarrier
+        vk::ImageMemoryBarrier firstBarrier 
+        {
+            .srcAccessMask = {},
+            .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eUndefined,
+            .newLayout = vk::ImageLayout::eTransferDstOptimal,
+            .image = dst.GetHandle(),
+            .subresourceRange = dst.GetImageSubresourceRange()
+        };
+        cmdBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
+            {}, {}, nullptr, firstBarrier
+        );
+
+        // Memory transfer
+        vk::BufferImageCopy region
+        {
+            .bufferOffset = 0,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1}, // TODO: remove hardcoded
+            .imageOffset = {0, 0, 0}, 
+            .imageExtent = dst.GetExtent()
+        };
+        cmdBuffer.copyBufferToImage(src.GetHandle(), dst.GetHandle(), vk::ImageLayout::eTransferDstOptimal, region);
+        
+        // Transition from transfer dst layout to shader read optimal using another ImageMemoryBarrier
+        vk::ImageMemoryBarrier secondBarrier
+        {
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+            .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+            .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+            .image = dst.GetHandle(),
+            .subresourceRange = dst.GetImageSubresourceRange()
+        };
+        cmdBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
+            {}, {}, nullptr, secondBarrier
+        );
+        cmdBuffer.end();
+
+        // Submit to queue and wait for completion
+        m_graphicsQueue.submit(
+            vk::SubmitInfo{
             .commandBufferCount = 1,
             .pCommandBuffers = &*cmdBuffer
             },
@@ -195,9 +265,9 @@ namespace Felina
 
     void Device::CreateImmediateCommandPool()
     {
-        // Creating a dedicated command pool used to allocate
-        // short-lived command buffers from (used for memory transfer ops)
+        // Creating a dedicated command pool used for memory transfer ops
         vk::CommandPoolCreateInfo poolInfo {
+            // Specify that cmd buffer allocated from this pool will be short-lived
             .flags = vk::CommandPoolCreateFlagBits::eTransient,
             .queueFamilyIndex = m_graphicsQueueFamilyIndex
         };

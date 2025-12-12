@@ -7,26 +7,30 @@ namespace Felina
 {
 	class Device;
 
-	class Image
+	class Texture
 	{
 		public:
-			Image(const Device& device,
+			Texture(const Device& device,
 				const vk::ImageCreateInfo& imageInfo,
 				const VmaAllocationCreateInfo& allocInfo
 			);
-			~Image();
+			~Texture();
 
 			const vk::Image& GetHandle() const { return m_image; };
 			const vk::raii::ImageView& GetImageView() const { return m_imageView; }
-			const vk::Format GetFormat() const { return m_format; }
+			const vk::Format GetFormat() const { return m_imageCreateInfo.format; }
+			const vk::ImageSubresourceRange GetImageSubresourceRange() const { return m_imageViewCreateInfo.subresourceRange; }
+			const vk::Extent3D GetExtent() const { return m_imageCreateInfo.extent; }
 
 		private:
-			void CreateImageView(const Device& device, const vk::ImageCreateInfo& imageInfo);
+			void CreateImageView(const Device& device);
 
 			const VmaAllocator& m_allocator;
 			vk::Image m_image; // no RAII because of VMA
-			vk::Format m_format;
 			vk::raii::ImageView m_imageView = nullptr;
 			VmaAllocation m_allocation;
+
+			vk::ImageCreateInfo m_imageCreateInfo;
+			vk::ImageViewCreateInfo m_imageViewCreateInfo;
 	};
 }

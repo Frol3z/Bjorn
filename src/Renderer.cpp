@@ -7,7 +7,7 @@
 #include "Device.hpp"
 #include "Swapchain.hpp"
 #include "Buffer.hpp"
-#include "Image.hpp"
+#include "Texture.hpp"
 #include "GBuffer.hpp"
 #include "Common.hpp"
 #include "PipelineBuilder.hpp"
@@ -144,6 +144,33 @@ namespace Felina
     void Renderer::LoadMesh(Mesh& mesh)
     {
         mesh.Load(*m_device);
+    }
+
+    void Renderer::LoadTexture(const Texture& texture, const void* rawImageData, size_t rawImageSize)
+    {
+        // When updating image data we recommend the use of staging buffers,
+        // rather than staging images for our hardware
+        // From here: https://developer.nvidia.com/vulkan-memory-management
+
+        // Create and fill staging buffer
+        vk::DeviceSize size = static_cast<vk::DeviceSize>(rawImageSize);
+        vk::BufferCreateInfo stagingBufferCreateInfo
+        {
+            .size = size,
+            .usage = vk::BufferUsageFlagBits::eTransferSrc,
+            .sharingMode = vk::SharingMode::eExclusive,
+        };
+        // See https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
+        // Staging copy for upload section
+        VmaAllocationCreateInfo allocCreateInfo{ 
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+                   | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+        };
+        Buffer stagingBuffer{ m_device->GetAllocator(), stagingBufferCreateInfo, allocCreateInfo };
+        
+        stagingBuffer.LoadData(rawImageData, rawImageSize);
+        m_device->CopyBufferToImage(stagingBuffer, texture, size);
     }
 
     ImGui_ImplVulkan_InitInfo Renderer::GetImGuiInitInfo()
