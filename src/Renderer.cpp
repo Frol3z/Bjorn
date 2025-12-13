@@ -173,6 +173,11 @@ namespace Felina
         m_device->CopyBufferToImage(stagingBuffer, texture, size);
     }
 
+    const Device& Renderer::GetDevice() const
+    {
+        return *m_device;
+    }
+
     ImGui_ImplVulkan_InitInfo Renderer::GetImGuiInitInfo()
     {
         vk::PipelineRenderingCreateInfoKHR pipelineRenderingCreateInfo{};

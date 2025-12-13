@@ -115,6 +115,52 @@ namespace Felina
 		}
 	}
 
+	static void LoadTextures(tinygltf::Model& model, Renderer& renderer, std::unordered_map<int, TextureID>& textures)
+	{
+		auto& rm = ResourceManager::GetInstance();
+
+		for (size_t i = 0; i < model.textures.size(); i++)
+		{
+			tinygltf::Texture& texture = model.textures[i];
+
+			// Ignoring samplers right now
+			if (texture.source == -1)
+				continue;
+			
+			//PRINTLN(texture.name);
+			//PRINTLN(texture.sampler);
+			//PRINTLN(texture.source);
+
+			tinygltf::Image& image = model.images[texture.source];
+
+			PRINTLN(image.name);
+			PRINTLN(image.image.size());
+			PRINTLN(image.width);
+			PRINTLN(image.height);
+			PRINTLN(image.mimeType);
+			PRINTLN(image.uri);
+			PRINTLN(image.bufferView);
+
+			assert(image.image.size() > 0 && "[GltfLoader] Image data not present!");
+
+			vk::ImageCreateInfo imageInfo = {				
+				.imageType = vk::ImageType::e2D,
+				.format = vk::Format::eR8G8B8A8Srgb,
+				.extent = vk::Extent3D{ static_cast<uint32_t>(image.width),static_cast<uint32_t>(image.height), 1 },
+				.mipLevels = 1,
+				.arrayLayers = 1,
+				.samples = vk::SampleCountFlagBits::e1,
+				.tiling = vk::ImageTiling::eOptimal,
+				.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+				.sharingMode = vk::SharingMode::eExclusive,
+				.initialLayout = vk::ImageLayout::eUndefined
+			};
+			VmaAllocationCreateInfo allocInfo = { .usage = VMA_MEMORY_USAGE_AUTO };
+			std::unique_ptr<Texture> tex = std::make_unique<Texture>(renderer.GetDevice(), imageInfo, allocInfo);
+			rm.LoadTexture(std::move(tex), texture.name, image.image.data(), image.image.size(), renderer);
+		}
+	}
+
 	static void LoadMaterials(tinygltf::Model& model, std::unordered_map<int, MaterialID>& materials)
 	{
 		auto& rm = ResourceManager::GetInstance();
@@ -205,6 +251,10 @@ namespace Felina
 		// Load all meshes
 		std::unordered_map<int, MeshID> meshes; // Look-up between glTF mesh indices and MeshIDs
 		LoadMeshes(model, renderer, meshes);
+
+		// Load all textures
+		std::unordered_map<int, TextureID> textures;
+		LoadTextures(model, renderer, textures);
 
 		// Load all materials
 		std::unordered_map<int, MaterialID> materials;

@@ -82,6 +82,8 @@ namespace Felina
 			void LoadMesh(Mesh& mesh);
 			void LoadTexture(const Texture& texture, const void* rawImageData, size_t rawImageSize);
 
+			const Device& GetDevice() const;
+
 			// Dear ImGui
 			ImGui_ImplVulkan_InitInfo GetImGuiInitInfo();
 			void DrawImGuiFrame(ImDrawData* drawData);

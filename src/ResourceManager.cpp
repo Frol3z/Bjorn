@@ -39,6 +39,7 @@ namespace Felina
 	void ResourceManager::UnloadAll()
 	{
 		m_meshes.clear();
+		m_textures.clear();
 		m_materials.clear();
 	}
 
