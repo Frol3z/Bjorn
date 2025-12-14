@@ -2,8 +2,8 @@
 
 #include <vulkan/vulkan_raii.hpp>
 #include <vk_mem_alloc.h>
-
 #include <glm/glm.hpp>
+#include <optional>
 
 // Required for MaterialID and MeshID definitions
 #include "ResourceManager.hpp"
@@ -73,6 +73,8 @@ namespace Felina
 			// - GBuffer (see GBuffer class)
 			static constexpr uint32_t MAX_DESCRIPTOR_SETS = 4;
 
+			static constexpr uint32_t MAX_SAMPLERS = 2;
+
 		public:
 			Renderer(Application& app, const Window& window, const Scene& scene);
 			~Renderer();
@@ -102,6 +104,7 @@ namespace Felina
 			void CreatePipeline();
 			void CreateCommandPool();
 			void CreateCommandBuffer();
+			void CreateSamplers();
 			void CreateUniformBuffers();
 			void CreateDescriptorPool();
 			void CreateDescriptorSets();
@@ -152,6 +155,8 @@ namespace Felina
 			vk::raii::Pipeline m_defLightingPipeline = nullptr;
 
 			std::vector<vk::raii::CommandBuffer> m_commandBuffers;
+
+			std::array<std::optional<vk::raii::Sampler>, MAX_SAMPLERS> m_samplers;
 
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_cameraUBOs;
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;

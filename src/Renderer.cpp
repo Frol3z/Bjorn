@@ -50,6 +50,7 @@ namespace Felina
         CreatePipeline();
         CreateCommandPool();
         CreateCommandBuffer();
+        CreateSamplers();
         CreateUniformBuffers();
         CreateDescriptorSets();
         CreateSyncObjects();
@@ -519,6 +520,59 @@ namespace Felina
             .commandBufferCount = MAX_FRAMES_IN_FLIGHT
         };
         m_commandBuffers = vk::raii::CommandBuffers(m_device->GetDevice(), allocInfo);
+    }
+
+    // Create and store default samplers
+    // - one sampler with repeated wrapping and no filtering
+    // - one sampler with repeated wrapping and bilinear filtering
+    //
+    // Additional notes:
+    // From glTF 2.0 specs: `When texture.sampler is undefined, 
+    // a sampler with repeat wrapping (in both directions) 
+    // and auto filtering MUST be used.` -> any of the above
+    // can be used as a fallback/default sampler
+    void Renderer::CreateSamplers()
+    {
+        std::array<vk::SamplerCreateInfo, MAX_SAMPLERS> createInfos{};
+        createInfos[0] = {
+            .magFilter = vk::Filter::eNearest,
+            .minFilter = vk::Filter::eNearest,
+            .mipmapMode = vk::SamplerMipmapMode::eNearest,
+            .addressModeU = vk::SamplerAddressMode::eRepeat,
+            .addressModeV = vk::SamplerAddressMode::eRepeat,
+            .addressModeW = vk::SamplerAddressMode::eRepeat,
+            .mipLodBias = 0.0f,
+            .anisotropyEnable = vk::False,
+            .maxAnisotropy = 1.0f,
+            .compareEnable = vk::False,
+            .compareOp = vk::CompareOp::eAlways,
+            .minLod = 0.0f,
+            .maxLod = 0.0f,
+            .borderColor = vk::BorderColor::eFloatOpaqueBlack,
+            .unnormalizedCoordinates = vk::False,
+        };
+        createInfos[1] = {
+            .magFilter = vk::Filter::eLinear,
+            .minFilter = vk::Filter::eLinear,
+            .mipmapMode = vk::SamplerMipmapMode::eNearest,
+            .addressModeU = vk::SamplerAddressMode::eRepeat,
+            .addressModeV = vk::SamplerAddressMode::eRepeat,
+            .addressModeW = vk::SamplerAddressMode::eRepeat,
+            .mipLodBias = 0.0f,
+            .anisotropyEnable = vk::False,
+            .maxAnisotropy = 1.0f,
+            .compareEnable = vk::False,
+            .compareOp = vk::CompareOp::eAlways,
+            .minLod = 0.0f,
+            .maxLod = 0.0f,
+            .borderColor = vk::BorderColor::eFloatOpaqueBlack,
+            .unnormalizedCoordinates = vk::False,
+        };
+
+        for (size_t i = 0; i < m_samplers.size(); i++)
+            m_samplers[i].emplace(m_device->GetDevice(), createInfos[i], nullptr);
+
+        PRINTLN("[Renderer] Initialized samplers!");
     }
 
     void Renderer::CreateUniformBuffers()
