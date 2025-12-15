@@ -19,6 +19,7 @@
 
 #include <iostream>
 #include <filesystem>
+#include <cassert>
 
 namespace Felina 
 {
@@ -52,7 +53,7 @@ namespace Felina
         CreateCommandBuffer();
         CreateSamplers();
         CreateUniformBuffers();
-        CreateDescriptorSets();
+        AllocateDescriptorSets();
         CreateSyncObjects();
     }
 
@@ -172,6 +173,112 @@ namespace Felina
         
         stagingBuffer.LoadData(rawImageData, rawImageSize);
         m_device->CopyBufferToImage(stagingBuffer, texture, size);
+    }
+
+    void Renderer::UpdateDescriptorSets()
+    {
+        // Bind the textures and samplers to their descriptor set (shared between frames)
+       {
+           // Textures
+           auto& rm = ResourceManager::GetInstance();
+           const auto& textures = rm.GetTextures();
+           std::array<vk::DescriptorImageInfo, MAX_TEXTURES> imageInfos;
+
+           assert(textures.size() < MAX_TEXTURES && "[Renderer] Loaded textures surpass MAX_TEXTURES!");
+           size_t i = 0;
+           for (const auto& [id, resource] : textures)
+           {
+               imageInfos[i] = {
+                   .sampler = nullptr,
+                   .imageView = resource.resource->GetImageView(),
+                   .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+               };
+               ++i;
+           }
+
+           // Samplers
+           std::array<vk::DescriptorImageInfo, MAX_SAMPLERS> samplerInfos;
+           for (size_t i = 0; i < samplerInfos.size(); i++)
+           {
+               samplerInfos[i] = {
+                .sampler = m_samplers[i].value(),
+                .imageView = nullptr,
+                .imageLayout = vk::ImageLayout::eUndefined
+               };
+           }
+
+           // Descriptor writes
+           std::array<vk::WriteDescriptorSet, 2> writes;
+           writes[0] = {
+                .dstSet = m_textureDescriptorSets,
+                .dstBinding = 0, // texture
+                .dstArrayElement = 0,
+                .descriptorCount = static_cast<uint32_t>(imageInfos.size()),
+                .descriptorType = vk::DescriptorType::eSampledImage,
+                .pImageInfo = imageInfos.data()
+           };
+           writes[1] = {
+             .dstSet = m_textureDescriptorSets,
+             .dstBinding = 1, // samplers
+             .dstArrayElement = 0,
+             .descriptorCount = static_cast<uint32_t>(samplerInfos.size()),
+             .descriptorType = vk::DescriptorType::eSampler,
+             .pImageInfo = samplerInfos.data()
+           };
+           m_device->GetDevice().updateDescriptorSets(writes, {});
+       }
+
+       // Bind the buffers to the corresponding set (per frame in flight)
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            // Camera descriptor set
+            vk::DescriptorBufferInfo cameraUBOInfo{
+                .buffer = m_cameraUBOs[i]->GetHandle(),
+                .offset = 0,
+                .range = sizeof(CameraData)
+            };
+            vk::WriteDescriptorSet cameraWrite{
+                .dstSet = m_cameraDescriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eUniformBuffer,
+                .pBufferInfo = &cameraUBOInfo
+            };
+            m_device->GetDevice().updateDescriptorSets(cameraWrite, {});
+
+            // Object descriptor set
+            vk::DescriptorBufferInfo objectSSBOInfo{
+                .buffer = m_objectSSBOs[i]->GetHandle(),
+                .offset = 0,
+                .range = sizeof(ObjectData) * MAX_OBJECTS
+            };
+            vk::WriteDescriptorSet objectWrite{
+                .dstSet = m_objectDescriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo = &objectSSBOInfo
+            };
+            m_device->GetDevice().updateDescriptorSets(objectWrite, {});
+
+            // Material descriptor set
+            vk::DescriptorBufferInfo materialSSBOInfo{
+                .buffer = m_materialSSBOs[i]->GetHandle(),
+                .offset = 0,
+                .range = sizeof(MaterialData) * MAX_MATERIALS
+            };
+            vk::WriteDescriptorSet materialWrite{
+                .dstSet = m_materialDescriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo = &materialSSBOInfo
+            };
+            m_device->GetDevice().updateDescriptorSets(materialWrite, {});
+        }
     }
 
     const Device& Renderer::GetDevice() const
@@ -445,6 +552,30 @@ namespace Felina
             .pBindings = &materialBinding
         };
         m_materialSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), materialLayout);
+
+        // Textures and sampler set layouts
+        constexpr uint32_t bindingCount = 2;
+        std::array<vk::DescriptorSetLayoutBinding, bindingCount> bindings;
+        bindings[0] = {
+            .binding = 0,
+            .descriptorType = vk::DescriptorType::eSampledImage,
+            .descriptorCount = MAX_TEXTURES,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+            .pImmutableSamplers = nullptr
+        };
+        bindings[1] = {
+            .binding = 1,
+            .descriptorType = vk::DescriptorType::eSampler,
+            .descriptorCount = MAX_SAMPLERS,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+            .pImmutableSamplers = nullptr
+        };
+        vk::DescriptorSetLayoutCreateInfo textureLayout
+        {
+            .bindingCount = bindingCount,
+            .pBindings = bindings.data()
+        };
+        m_textureSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), textureLayout);
     }
 
     void Renderer::CreatePushConstant()
@@ -470,7 +601,7 @@ namespace Felina
         pipelineBuilder.SetShaderStages(geomShaderStages);
         pipelineBuilder.SetColorBlending(static_cast<uint32_t>(gBuffer->GetAttachmentsCount() - 1)); // Depth attachment doesn't need blending!
 
-        std::vector<vk::DescriptorSetLayout> layouts{ m_cameraSetLayout, m_objectSetLayout, m_materialSetLayout };
+        std::vector<vk::DescriptorSetLayout> layouts{ m_cameraSetLayout, m_objectSetLayout, m_materialSetLayout, m_textureSetLayout };
         std::vector<vk::PushConstantRange> ranges{ m_objectPushConst };
         pipelineBuilder.SetPipelineLayout(layouts, ranges);
         pipelineBuilder.SetAttachmentsFormat(gBuffer->GetColorAttachmentFormats(), gBuffer->GetDepthFormat());
@@ -608,16 +739,20 @@ namespace Felina
     void Renderer::CreateDescriptorPool()
     {
         // TODO: remove hardcoded number of attachments
-        // NOTE: the pool is created before the G-buffer because it
+        // NOTE: the pool is created before the GBuffer because it
         // uses the pool to allocate the attachments sets
         uint32_t attachmentsCount = 4 * MAX_FRAMES_IN_FLIGHT;
-        std::array<vk::DescriptorPoolSize, 3> poolSizes {
+        std::array<vk::DescriptorPoolSize, 5> poolSizes {
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eStorageBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
             vk::DescriptorPoolSize { 
                 .type = vk::DescriptorType::eCombinedImageSampler,
                 .descriptorCount = attachmentsCount
-            }
+            },
+
+            // These reserved space will be used by ONE descriptor set (see below)
+            vk::DescriptorPoolSize { .type = vk::DescriptorType::eSampledImage, .descriptorCount = MAX_TEXTURES },
+            vk::DescriptorPoolSize { .type = vk::DescriptorType::eSampler, .descriptorCount = MAX_SAMPLERS }
         };
         vk::DescriptorPoolCreateInfo poolInfo{
             .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
@@ -628,89 +763,44 @@ namespace Felina
         m_descriptorPool = vk::raii::DescriptorPool(m_device->GetDevice(), poolInfo);
     }
 
-    void Renderer::CreateDescriptorSets()
+    // Descriptor sets allocation from the main pool
+    void Renderer::AllocateDescriptorSets()
     {
-        // Descriptor sets allocation from the main pool
+        // Camera
+        std::vector<vk::DescriptorSetLayout> cameraLayouts(MAX_FRAMES_IN_FLIGHT, m_cameraSetLayout);
+        vk::DescriptorSetAllocateInfo cameraAllocInfo{
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = static_cast<uint32_t>(cameraLayouts.size()),
+            .pSetLayouts = cameraLayouts.data()
+        };
+        m_cameraDescriptorSets = m_device->GetDevice().allocateDescriptorSets(cameraAllocInfo);
+
+        // Object
+        std::vector<vk::DescriptorSetLayout> objectLayouts(MAX_FRAMES_IN_FLIGHT, m_objectSetLayout);
+        vk::DescriptorSetAllocateInfo objectAllocInfo{
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = static_cast<uint32_t>(objectLayouts.size()),
+            .pSetLayouts = objectLayouts.data()
+        };
+        m_objectDescriptorSets = m_device->GetDevice().allocateDescriptorSets(objectAllocInfo);
+
+        // Material
+        std::vector<vk::DescriptorSetLayout> materialLayouts(MAX_FRAMES_IN_FLIGHT, m_materialSetLayout);
+        vk::DescriptorSetAllocateInfo materialAllocInfo{
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = static_cast<uint32_t>(materialLayouts.size()),
+            .pSetLayouts = materialLayouts.data()
+        };
+        m_materialDescriptorSets = m_device->GetDevice().allocateDescriptorSets(materialAllocInfo);
+
+        // Texture and sampler
+        vk::DescriptorSetAllocateInfo textureAllocInfo
         {
-            // Camera descriptor sets allocation
-            std::vector<vk::DescriptorSetLayout> cameraLayouts(MAX_FRAMES_IN_FLIGHT, m_cameraSetLayout);
-            vk::DescriptorSetAllocateInfo cameraAllocInfo{
-                .descriptorPool = m_descriptorPool,
-                .descriptorSetCount = static_cast<uint32_t>(cameraLayouts.size()),
-                .pSetLayouts = cameraLayouts.data()
-            };
-            m_cameraDescriptorSets = m_device->GetDevice().allocateDescriptorSets(cameraAllocInfo);
-
-            // Object descriptor sets allocation
-            std::vector<vk::DescriptorSetLayout> objectLayouts(MAX_FRAMES_IN_FLIGHT, m_objectSetLayout);
-            vk::DescriptorSetAllocateInfo objectAllocInfo{
-                .descriptorPool = m_descriptorPool,
-                .descriptorSetCount = static_cast<uint32_t>(objectLayouts.size()),
-                .pSetLayouts = objectLayouts.data()
-            };
-            m_objectDescriptorSets = m_device->GetDevice().allocateDescriptorSets(objectAllocInfo);
-
-            // Material descriptor sets allocation
-            std::vector<vk::DescriptorSetLayout> materialLayouts(MAX_FRAMES_IN_FLIGHT, m_materialSetLayout);
-            vk::DescriptorSetAllocateInfo materialAllocInfo{
-                .descriptorPool = m_descriptorPool,
-                .descriptorSetCount = static_cast<uint32_t>(materialLayouts.size()),
-                .pSetLayouts = materialLayouts.data()
-            };
-            m_materialDescriptorSets = m_device->GetDevice().allocateDescriptorSets(materialAllocInfo);
-        }
-        
-        // Bind the buffers to the corresponding set
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-        {
-            // Camera descriptor set
-            vk::DescriptorBufferInfo cameraUBOInfo{
-                .buffer = m_cameraUBOs[i]->GetHandle(),
-                .offset = 0,
-                .range = sizeof(CameraData)
-            };
-            vk::WriteDescriptorSet cameraWrite{
-                .dstSet = m_cameraDescriptorSets[i],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = vk::DescriptorType::eUniformBuffer,
-                .pBufferInfo = &cameraUBOInfo
-            };
-            m_device->GetDevice().updateDescriptorSets(cameraWrite, {});
-            
-            // Object descriptor set
-            vk::DescriptorBufferInfo objectSSBOInfo{
-                .buffer = m_objectSSBOs[i]->GetHandle(),
-                .offset = 0,
-                .range = sizeof(ObjectData) * MAX_OBJECTS
-            };
-            vk::WriteDescriptorSet objectWrite{
-                .dstSet = m_objectDescriptorSets[i],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = vk::DescriptorType::eStorageBuffer,
-                .pBufferInfo = &objectSSBOInfo
-            };
-            m_device->GetDevice().updateDescriptorSets(objectWrite, {});
-
-            // Material descriptor set
-            vk::DescriptorBufferInfo materialSSBOInfo{
-                .buffer = m_materialSSBOs[i]->GetHandle(),
-                .offset = 0,
-                .range = sizeof(MaterialData) * MAX_MATERIALS
-            };
-            vk::WriteDescriptorSet materialWrite{
-                .dstSet = m_materialDescriptorSets[i],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = vk::DescriptorType::eStorageBuffer,
-                .pBufferInfo = &materialSSBOInfo
-            };
-            m_device->GetDevice().updateDescriptorSets(materialWrite, {});
-        }
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &*m_textureSetLayout
+        };
+        m_textureDescriptorSets = std::move(m_device->GetDevice().allocateDescriptorSets(textureAllocInfo).front());
     }
 
     void Renderer::CreateSyncObjects()
@@ -843,10 +933,15 @@ namespace Felina
         );
         m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
 
-        // Bind descriptor sets (camera UBO, object SSBO)
+        // Bind descriptor sets (camera UBO, object SSBO, texture and sampler arrays)
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics, m_defGeometryPipelineLayout, 0,
-            { m_cameraDescriptorSets[m_currentFrame], m_objectDescriptorSets[m_currentFrame], m_materialDescriptorSets[m_currentFrame] },
+            {   
+                m_cameraDescriptorSets[m_currentFrame], 
+                m_objectDescriptorSets[m_currentFrame], 
+                m_materialDescriptorSets[m_currentFrame], 
+                m_textureDescriptorSets // shared between frames in flight
+            },
             nullptr
         );
 

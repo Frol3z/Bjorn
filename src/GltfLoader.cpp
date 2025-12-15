@@ -34,6 +34,10 @@ namespace Felina
 					auto& normAccessor = model.accessors[primitive.attributes["NORMAL"]];
 					auto& normBufferView = model.bufferViews[normAccessor.bufferView];
 					auto& normBuffer = model.buffers[normBufferView.buffer];
+					// Texture coordinates
+					auto& uvAccessor = model.accessors[primitive.attributes["TEXCOORD_0"]];
+					auto& uvBufferView = model.bufferViews[uvAccessor.bufferView];
+					auto& uvBuffer = model.buffers[uvBufferView.buffer];
 
 					// The following assertion SHOULD be guaranteed by the implementation 
 					// of the glTF-2.0 specs, so these checks are just for safety
@@ -41,24 +45,32 @@ namespace Felina
 					assert(posAccessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT && "[GltfLoader] Unexpected componentType found for vertex position!");
 					assert(normAccessor.type == TINYGLTF_TYPE_VEC3 && "[GltfLoader] Unexpected type found for vertex normal!");
 					assert(normAccessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT && "[GltfLoader] Unexpected componentType found for vertex normal!");
+					assert(uvAccessor.type == TINYGLTF_TYPE_VEC2 && "[GltfLoader] Unexpected type found for uv!");
+					// TODO: add unsigned byte and unsigned short component type support
+					assert(uvAccessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT && "[GltfLoader] Unexpected componentType found for vertex normal!");
 
 					// Reading data from the buffer
 					const uint8_t* posStart = posBuffer.data.data() + posBufferView.byteOffset + posAccessor.byteOffset;
 					const uint8_t* normStart = normBuffer.data.data() + normBufferView.byteOffset + normAccessor.byteOffset;
+					const uint8_t* uvStart = uvBuffer.data.data() + uvBufferView.byteOffset + uvAccessor.byteOffset;
 					size_t posStride = posAccessor.ByteStride(posBufferView);
 					size_t normStride = normAccessor.ByteStride(normBufferView);
+					size_t uvStride = uvAccessor.ByteStride(uvBufferView);
 
 					// The following assertion SHOULD be guaranteed by the implementation as well
 					assert(posAccessor.count == normAccessor.count && "[GltfLoader] Number of vertex positions and normals differ!");
+					assert(posAccessor.count == uvAccessor.count && "[GltfLoader] Number of vertex positions and uv differ!");
 					vertices.resize(posAccessor.count);
 
 					for (size_t i = 0; i < posAccessor.count; i++)
 					{
 						const float* posPtr = reinterpret_cast<const float*>(posStart + i * posStride);
 						const float* normPtr = reinterpret_cast<const float*>(normStart + i * normStride);
+						const float* uvPtr = reinterpret_cast<const float*>(uvStart + i * uvStride);
 
 						vertices[i].pos = glm::vec3(posPtr[0], posPtr[1], posPtr[2]);
 						vertices[i].normal = glm::vec3(normPtr[0], normPtr[1], normPtr[2]);
+						vertices[i].uv = glm::vec2(uvPtr[0], uvPtr[1]);
 					}
 				}
 

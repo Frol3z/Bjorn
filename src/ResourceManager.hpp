@@ -47,6 +47,7 @@ namespace Felina
 			const Material& GetMaterial(MaterialID id) const;
 			const std::string& GetMaterialName(MaterialID id) const;
 			const std::unordered_map<MaterialID, Resource<Material>>& GetMaterials() const { return m_materials; }
+			const std::unordered_map<TextureID, Resource<Texture>>& GetTextures() const { return m_textures; }
 		private:
 			ResourceManager(){} // Private constructor
 

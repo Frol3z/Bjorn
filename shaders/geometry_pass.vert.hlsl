@@ -32,13 +32,15 @@ struct VertexInput
 {
     [[vk::location(0)]] float3 position : POSITION;
     [[vk::location(1)]] float3 normal : NORMAL;
+    [[vk::location(2)]] float2 uv : TEXCOORD0;
 };
 
 struct VertexOutput
 {
     float4 position : SV_Position;
     float3 normal : NORMAL;
-    uint materialIndex : TEXCOORD0;
+    float2 uv : TEXCOORD0;
+    uint materialIndex : TEXCOORD1;
 };
 
 VertexOutput main(VertexInput input, uint vertexId : SV_VertexID)
@@ -48,6 +50,7 @@ VertexOutput main(VertexInput input, uint vertexId : SV_VertexID)
     float3x3 normalMatrix = objectBuffer[pushConsts.objectIndex].normal;
     output.position = mul(cameraData.proj, mul(cameraData.view, mul(model, float4(input.position, 1.0))));
     output.normal = normalize(mul(normalMatrix, input.normal));
+    output.uv = input.uv;
     output.materialIndex = pushConsts.materialIndex;
     return output;
 }

@@ -202,11 +202,14 @@ namespace Felina
         vk::StructureChain<
             vk::PhysicalDeviceFeatures2,
             vk::PhysicalDeviceVulkan13Features,
-            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> // To be able to change dinamically some pipeline properties
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+            vk::PhysicalDeviceRobustness2FeaturesKHR
+        > // To be able to change dinamically some pipeline properties
             featureChain = {
                 {},
                 {.synchronization2 = true, .dynamicRendering = true},
-                {.extendedDynamicState = true}
+                {.extendedDynamicState = true},
+                { .nullDescriptor = true }
         };
 
         // Required device EXTENSIONS

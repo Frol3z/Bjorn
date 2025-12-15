@@ -26,6 +26,8 @@ namespace Felina
 
 		InitImGui();
 		InitScene();
+
+		m_renderer->UpdateDescriptorSets();
 	}
 
 	Application::~Application() = default;

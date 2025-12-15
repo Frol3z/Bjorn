@@ -71,9 +71,11 @@ namespace Felina
 			// - objects SSBO
 			// - materials SSBO
 			// - GBuffer (see GBuffer class)
-			static constexpr uint32_t MAX_DESCRIPTOR_SETS = 4;
+			// - texture and sampler arrays
+			static constexpr uint32_t MAX_DESCRIPTOR_SETS = 5;
 
 			static constexpr uint32_t MAX_SAMPLERS = 2;
+			static constexpr uint32_t MAX_TEXTURES = 10;
 
 		public:
 			Renderer(Application& app, const Window& window, const Scene& scene);
@@ -83,6 +85,7 @@ namespace Felina
 			void WaitIdle();
 			void LoadMesh(Mesh& mesh);
 			void LoadTexture(const Texture& texture, const void* rawImageData, size_t rawImageSize);
+			void UpdateDescriptorSets(); 
 
 			const Device& GetDevice() const;
 
@@ -107,7 +110,7 @@ namespace Felina
 			void CreateSamplers();
 			void CreateUniformBuffers();
 			void CreateDescriptorPool();
-			void CreateDescriptorSets();
+			void AllocateDescriptorSets();
 			void CreateSyncObjects();
 
 			void DrawObject(const Object& obj, uint32_t& idx);
@@ -147,6 +150,7 @@ namespace Felina
 			vk::raii::DescriptorSetLayout m_cameraSetLayout = nullptr;
 			vk::raii::DescriptorSetLayout m_materialSetLayout = nullptr;
 			vk::raii::DescriptorSetLayout m_objectSetLayout = nullptr;
+			vk::raii::DescriptorSetLayout m_textureSetLayout = nullptr;
 			vk::PushConstantRange m_objectPushConst;
 
 			vk::raii::PipelineLayout m_defGeometryPipelineLayout = nullptr;
@@ -164,6 +168,8 @@ namespace Felina
 			std::vector<vk::raii::DescriptorSet> m_cameraDescriptorSets;
 			std::vector<vk::raii::DescriptorSet> m_objectDescriptorSets;
 			std::vector<vk::raii::DescriptorSet> m_materialDescriptorSets;
+			// Just one shared between frames because it will be read-only
+			vk::raii::DescriptorSet m_textureDescriptorSets = nullptr;
 
 			std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
 			std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
