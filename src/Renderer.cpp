@@ -363,11 +363,19 @@ namespace Felina
             UpdateObject(obj, objectDatas);
         }
         m_objectSSBOs[m_currentFrame]->LoadData(objectDatas.data(), objectDatas.size() * sizeof(ObjectData));
+        
+        // TODO: optimize by avoid doing these iterations each frame if not needed
+        // Iterate through texture to fill up the look-up table
+        auto& rm = ResourceManager::GetInstance();
+        auto& texturesMapping = m_textureIDToArrayID[m_currentFrame];
+        uint32_t index = 0;
+        for (const auto& [id, res] : rm.GetTextures())
+            texturesMapping[id] = index++;
 
         // Fill the material data storage buffer
         std::vector<MaterialData> materialDatas;
-        auto& mapping = m_materialIDToSSBOID[m_currentFrame];
-        uint32_t index = 0;
+        auto& materialsMapping = m_materialIDToSSBOID[m_currentFrame];
+        index = 0;
         for (const auto& [id, res] : ResourceManager::GetInstance().GetMaterials())
         {
             // Get raw pointer to the material
@@ -378,10 +386,18 @@ namespace Felina
             matData.albedo = mat->GetAlbedo();
             matData.specular = mat->GetSpecular();
             matData.materialInfo = mat->GetCoefficients();
+
+            // If the texture is defined use the mapping to get the
+            // correct texture index, else -1
+            TextureID texId = mat->GetAlbedoTexture();
+            matData.albedoTex = (texId != -1) ? texturesMapping[texId] : texId;
+            texId = mat->GetSpecularTexture();
+            matData.specularTex = (texId != -1) ? texturesMapping[texId] : texId;
+            
             materialDatas.push_back(matData);
 
             // Keep track of the storage buffer IDs
-            mapping[id] = index++;
+            materialsMapping[id] = index++;
         }
         m_materialSSBOs[m_currentFrame]->LoadData(materialDatas.data(), materialDatas.size() * sizeof(MaterialData));
     }
@@ -554,6 +570,8 @@ namespace Felina
         m_materialSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), materialLayout);
 
         // Textures and sampler set layouts
+        // Binding 0 -> Textures array
+        // Binding 1 -> Samplers array
         constexpr uint32_t bindingCount = 2;
         std::array<vk::DescriptorSetLayoutBinding, bindingCount> bindings;
         bindings[0] = {

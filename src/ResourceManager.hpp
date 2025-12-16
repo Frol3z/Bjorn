@@ -3,15 +3,12 @@
 #include "Mesh.hpp"
 #include "Material.hpp"
 #include "Texture.hpp"
+#include "Common.hpp"
 
 #include <unordered_map>
 
 namespace Felina
 {
-	using MeshID = uint32_t;
-	using MaterialID = uint32_t;
-	using TextureID = uint32_t;
-
 	class Renderer;
 
 	class ResourceManager

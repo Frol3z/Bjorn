@@ -4,9 +4,12 @@
 // Material data
 struct MaterialData
 {
-    float3 albedo;
-    float3 specular;
+    float3       albedo;
+    float3     specular;
     float4 materialInfo;
+    
+    uint      albedoTex;   // index to address textures[]
+    uint    specularTex;   // index to address textures[]
 };
 
 [[vk::binding(0, 2)]]
@@ -16,7 +19,7 @@ StructuredBuffer<MaterialData> materialBuffer;
 Texture2D textures[MAX_TEXTURES];
 
 [[vk::binding(1, 3)]]
-SamplerState samplers[MAX_SAMPLERS];
+SamplerState samplers[MAX_SAMPLERS]; // NOTE: currently always defaulting to samplers[0]
 
 struct VertexOutput
 {
@@ -38,10 +41,24 @@ FragmentOutput main(VertexOutput inVert)
 {
 	FragmentOutput output;
     MaterialData m = materialBuffer[inVert.materialIndex];
-    output.albedo = textures[0].Sample(samplers[0], inVert.uv);
-    //output.albedo = float4(m.albedo, 1.0);
-    output.specular = float4(m.specular, 1.0);
+    
+    // Albedo
+    if(m.albedoTex != -1)
+        output.albedo = textures[m.albedoTex].Sample(samplers[0], inVert.uv);
+    else
+        output.albedo = float4(m.albedo, 1.0);
+        
+    // Specular
+    if (m.specularTex != -1)
+        output.specular = textures[m.specularTex].Sample(samplers[0], inVert.uv);
+    else
+        output.specular = float4(m.specular, 1.0);
+    
+    // Material Info
     output.materialInfo = m.materialInfo;
+    
+    // Normal
     output.normal = float4(normalize(inVert.normal), 1.0);
-	return output;
+	
+    return output;
 }

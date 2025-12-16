@@ -169,11 +169,12 @@ namespace Felina
 			};
 			VmaAllocationCreateInfo allocInfo = { .usage = VMA_MEMORY_USAGE_AUTO };
 			std::unique_ptr<Texture> tex = std::make_unique<Texture>(renderer.GetDevice(), imageInfo, allocInfo);
-			rm.LoadTexture(std::move(tex), texture.name, image.image.data(), image.image.size(), renderer);
+			TextureID id = rm.LoadTexture(std::move(tex), texture.name, image.image.data(), image.image.size(), renderer);
+			textures.insert(std::pair<int, TextureID>(static_cast<int>(i), id));
 		}
 	}
 
-	static void LoadMaterials(tinygltf::Model& model, std::unordered_map<int, MaterialID>& materials)
+	static void LoadMaterials(tinygltf::Model& model, std::unordered_map<int, TextureID>& textures, std::unordered_map<int, MaterialID>& materials)
 	{
 		auto& rm = ResourceManager::GetInstance();
 		for (size_t i = 0; i < model.materials.size(); i++)
@@ -188,11 +189,13 @@ namespace Felina
 			auto roughness = material.pbrMetallicRoughness.roughnessFactor;
 			auto shininess = 20.0f;
 			float ambient = 0.02f;
+			int albedoTexIndex = material.pbrMetallicRoughness.baseColorTexture.index;
 
 			std::unique_ptr<Material> mat = std::make_unique<Material>(
 				glm::vec3(baseColor[0], baseColor[1], baseColor[2]),
 				glm::vec3(1.0, 1.0, 1.0),
-				glm::vec4(ambient, roughness, metalness, shininess)
+				glm::vec4(ambient, roughness, metalness, shininess),
+				(albedoTexIndex == -1) ? -1 : textures[albedoTexIndex]
 			);
 			
 			MaterialID id = rm.LoadMaterial(std::move(mat), material.name);
@@ -270,7 +273,7 @@ namespace Felina
 
 		// Load all materials
 		std::unordered_map<int, MaterialID> materials;
-		LoadMaterials(model, materials);
+		LoadMaterials(model, textures, materials);
 
 		// Iterate through each top-level node (parent = nullptr)
 		for (const auto nodeIdx : model.scenes[model.defaultScene].nodes)

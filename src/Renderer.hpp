@@ -40,6 +40,9 @@ namespace Felina
 				glm::vec3 albedo;
 				glm::vec3 specular;
 				glm::vec4 materialInfo;
+
+				uint32_t albedoTex;
+				uint32_t specularTex;
 			};
 
 			struct ObjectData
@@ -133,6 +136,8 @@ namespace Felina
 			uint32_t m_currentFrame = 0;
 			// Look-up table to match the Material ID to the physical GPU storage buffer index
 			std::array<std::unordered_map<MaterialID, uint32_t>, MAX_FRAMES_IN_FLIGHT> m_materialIDToSSBOID;
+			// Look-up table to match the Texture ID to the GPU texture array index
+			std::array<std::unordered_map<TextureID, uint32_t>, MAX_FRAMES_IN_FLIGHT> m_textureIDToArrayID;
 
 			// Dear ImGui custom vertex shader (temporary fix for colors issue)
 			std::vector<char> m_imGuiCustomVertShaderCode;
