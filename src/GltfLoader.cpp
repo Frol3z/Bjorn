@@ -9,19 +9,20 @@
 
 namespace Felina
 {
+	// Load all meshes in `model` and fill `meshes` with the corresponding MeshIDs
 	static void LoadMeshes(tinygltf::Model& model, Renderer& renderer, std::unordered_map<int, MeshID>& meshes)
 	{
 		auto& rm = ResourceManager::GetInstance();
-
+		
 		// Iterate through all meshes and load them
 		for (size_t i = 0; i < model.meshes.size(); i++)
 		{
 			auto& mesh = model.meshes[i];
-
 			for (auto& primitive : mesh.primitives)
 			{
 				// NOTE: only mode currently supported is TRIANGLE_LIST (see PipelineBuilder.cpp)
-				assert(primitive.mode == TINYGLTF_MODE_TRIANGLES && "[GltfLoader] Unsupported mode required!");
+				if (primitive.mode != TINYGLTF_MODE_TRIANGLES)
+					throw std::runtime_error("[GltfLoader] Unsupported mode required!");
 
 				// Loading vertices
 				std::vector<Vertex> vertices;
@@ -34,7 +35,7 @@ namespace Felina
 					auto& normAccessor = model.accessors[primitive.attributes["NORMAL"]];
 					auto& normBufferView = model.bufferViews[normAccessor.bufferView];
 					auto& normBuffer = model.buffers[normBufferView.buffer];
-					// Texture coordinates
+					// Vertex UVs
 					auto& uvAccessor = model.accessors[primitive.attributes["TEXCOORD_0"]];
 					auto& uvBufferView = model.bufferViews[uvAccessor.bufferView];
 					auto& uvBuffer = model.buffers[uvBufferView.buffer];
@@ -60,8 +61,8 @@ namespace Felina
 					// The following assertion SHOULD be guaranteed by the implementation as well
 					assert(posAccessor.count == normAccessor.count && "[GltfLoader] Number of vertex positions and normals differ!");
 					assert(posAccessor.count == uvAccessor.count && "[GltfLoader] Number of vertex positions and uv differ!");
+					
 					vertices.resize(posAccessor.count);
-
 					for (size_t i = 0; i < posAccessor.count; i++)
 					{
 						const float* posPtr = reinterpret_cast<const float*>(posStart + i * posStride);
@@ -83,7 +84,6 @@ namespace Felina
 					auto& accessor = model.accessors[primitive.indices];
 					auto& bufferView = model.bufferViews[accessor.bufferView];
 					auto& buffer = model.buffers[bufferView.buffer];
-
 					indices.resize(accessor.count);
 
 					assert(accessor.type == TINYGLTF_TYPE_SCALAR && "[GltfLoader] Unexpected type found for indices!");
@@ -125,37 +125,29 @@ namespace Felina
 				meshes.insert(std::pair<int, MeshID>(static_cast<int>(i), id));
 			}
 		}
+		LOG("[GltfLoader] Loaded " + std::to_string(meshes.size()) + " meshes");
 	}
 
+	// Load all textures in `model` and fill `textures` with the corresponding TextureIDs
 	static void LoadTextures(tinygltf::Model& model, Renderer& renderer, std::unordered_map<int, TextureID>& textures)
 	{
 		auto& rm = ResourceManager::GetInstance();
-
 		for (size_t i = 0; i < model.textures.size(); i++)
 		{
 			tinygltf::Texture& texture = model.textures[i];
-
-			// Ignoring samplers right now
+			// texture.sampler <- currently ignored
 			if (texture.source == -1)
 				continue;
-			
-			//PRINTLN(texture.name);
-			//PRINTLN(texture.sampler);
-			//PRINTLN(texture.source);
 
 			tinygltf::Image& image = model.images[texture.source];
 
-			PRINTLN(image.name);
-			PRINTLN(image.image.size());
-			PRINTLN(image.width);
-			PRINTLN(image.height);
-			PRINTLN(image.mimeType);
-			PRINTLN(image.uri);
-			PRINTLN(image.bufferView);
+			// Check if image data wasn't loaded for some reasons
+			// e.g. forget to put textures in the same path as the .glTF
+			if (image.image.size() == 0)
+				throw std::runtime_error("[GltfLoader] Image data missing! Check previous warnings or errors from the loader.");
 
-			assert(image.image.size() > 0 && "[GltfLoader] Image data not present!");
-
-			vk::ImageCreateInfo imageInfo = {				
+			// Create texture object
+			vk::ImageCreateInfo imageInfo {				
 				.imageType = vk::ImageType::e2D,
 				.format = vk::Format::eR8G8B8A8Srgb,
 				.extent = vk::Extent3D{ static_cast<uint32_t>(image.width),static_cast<uint32_t>(image.height), 1 },
@@ -169,20 +161,21 @@ namespace Felina
 			};
 			VmaAllocationCreateInfo allocInfo = { .usage = VMA_MEMORY_USAGE_AUTO };
 			std::unique_ptr<Texture> tex = std::make_unique<Texture>(renderer.GetDevice(), imageInfo, allocInfo);
+
+			// Load texture
 			TextureID id = rm.LoadTexture(std::move(tex), texture.name, image.image.data(), image.image.size(), renderer);
 			textures.insert(std::pair<int, TextureID>(static_cast<int>(i), id));
 		}
+		LOG("[GltfLoader] Loaded " + std::to_string(textures.size()) + " textures");
 	}
 
+	// Load all materials in `model` and fill `materials` with the corresponding MaterialIDs
 	static void LoadMaterials(tinygltf::Model& model, std::unordered_map<int, TextureID>& textures, std::unordered_map<int, MaterialID>& materials)
 	{
 		auto& rm = ResourceManager::GetInstance();
 		for (size_t i = 0; i < model.materials.size(); i++)
 		{
 			const auto& material = model.materials[i];
-
-			PRINT("Loading");
-			PRINTLN(material.name);
 
 			auto baseColor = material.pbrMetallicRoughness.baseColorFactor;
 			auto metalness = material.pbrMetallicRoughness.metallicFactor;
@@ -201,26 +194,34 @@ namespace Felina
 			MaterialID id = rm.LoadMaterial(std::move(mat), material.name);
 			materials.insert(std::pair<int, MaterialID>(static_cast<int>(i), id));
 		}
+		LOG("[GltfLoader] Loaded " + std::to_string(materials.size()) + " materials");
 	}
 
+	// Create object and iterate recursively through its children
 	static std::unique_ptr<Object> LoadNode(
 		const tinygltf::Node& node, Object* parent,
-		tinygltf::Model& model, 
-		std::unordered_map<int, MeshID>& meshes, std::unordered_map<int, MaterialID>& materials
+		const tinygltf::Model& model, 
+		const std::unordered_map<int, MeshID>& meshes, const std::unordered_map<int, MaterialID>& materials
 	)
 	{
-		assert(node.mesh != -1 && "[GltfLoader] Node without a mesh found!");
+		if (node.mesh == -1)
+			throw std::runtime_error("[GltfLoader] " + node.name + " has no mesh");
 
 		// Retrieve resource IDs
-		MeshID meshId = meshes[node.mesh];
-		tinygltf::Mesh& mesh = model.meshes[node.mesh];
-		MaterialID materialId = materials[mesh.primitives[0].material]; // Strong assumption
+		MeshID meshId = meshes.at(node.mesh);
+		const tinygltf::Mesh& mesh = model.meshes[node.mesh];
 
+		// Here it is assumed that if a mesh has multiple primitives,
+		// they'll be all rendered with the material used by the first one
+		// TODO: add submeshes support
+		MaterialID materialId = materials.at(mesh.primitives[0].material);
+
+		// Object creation
 		std::unique_ptr<Object> obj = std::make_unique<Object>(node.name, meshId, materialId, parent);
 
 		// Apply transform
 		// Transform -> see p.18 of glTF specs
-		if (node.matrix.size() == 16)
+		if (node.matrix.size() == 16) // if matrix is specified it will have priority
 		{
 			glm::mat4 mat;
 			for (int i = 0; i < 16; i++)
@@ -243,36 +244,57 @@ namespace Felina
 			std::unique_ptr<Object> child = LoadNode(model.nodes[childIdx], obj.get(), model, meshes, materials);
 			obj->AddChild(std::move(child)); // Move child object ownership to the parent
 		}
-
 		return std::move(obj);
 	}
 
-	void LoadSceneFromGlTF(const std::string& filepath, Scene& scene, Renderer& renderer)
+	// Parse filepath (either .glb or .gltf file) into model using tinygltf
+	static void ParseFile(const std::filesystem::path& filepath, tinygltf::Model& model)
 	{
 		tinygltf::TinyGLTF loader;
-		tinygltf::Model model;
 		std::string err;
 		std::string warn;
+		const std::string extension = filepath.extension().string();
 
-		// NOTE: loading support is only limited to GLB (binary glTF)
-		bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, filepath);
+		// Check file extension and load file
+		bool ret{};
+		if (extension == ".glb")
+			ret = loader.LoadBinaryFromFile(&model, &err, &warn, filepath.string());
+		else if (extension == ".gltf")
+			ret = loader.LoadASCIIFromFile(&model, &err, &warn, filepath.string());
+		else
+			throw std::runtime_error(
+				"[GltfLoader] Tried to load unsupported file format.\n \
+				 Currently supported file formats: .glb, .gltf."
+			);
+
 		if (!warn.empty())
-			std::cout << "[GltfLoader] Warn: " << warn << 'n';
+			LOG("[GltfLoader] Warn: " + warn);
 		if (!err.empty())
-			std::cout << "[GltfLoader] Err: " << err << 'n';
+			throw std::runtime_error("[GltfLoader] Err: " + err);
 		if (!ret)
-			std::cerr << "[GltfLoader] Failed to parse glTF: " << filepath << '\n';
+			throw std::runtime_error("[GltfLoader] Failed to parse glTF: " + filepath.string());
 
-		// Load all meshes
-		std::unordered_map<int, MeshID> meshes; // Look-up between glTF mesh indices and MeshIDs
-		LoadMeshes(model, renderer, meshes);
+		LOG("[GltfLoader] Parsed " + filepath.string());
+	}
 
-		// Load all textures
+	// Load resources and setup `scene` with the data provided by the file in `filepath`
+	// NOTE: 
+	//    - `renderer` is used to call backend functions for loading resources
+	//    - `filepath` must be a valid path to either a .gltf or .glb file, 
+	//       otherwise an exception will be raised
+	void LoadSceneFromGlTF(const std::filesystem::path& filepath, Scene& scene, Renderer& renderer)
+	{
+		// File parsing
+		tinygltf::Model model;
+		ParseFile(filepath, model);
+
+		// Load resources
+		// NOTE: texture MUST be loaded before materials!
+		std::unordered_map<int, MeshID>	meshes; // Look-up between glTF indices and ResourceID
 		std::unordered_map<int, TextureID> textures;
-		LoadTextures(model, renderer, textures);
-
-		// Load all materials
 		std::unordered_map<int, MaterialID> materials;
+		LoadMeshes(model, renderer, meshes);
+		LoadTextures(model, renderer, textures);
 		LoadMaterials(model, textures, materials);
 
 		// Iterate through each top-level node (parent = nullptr)

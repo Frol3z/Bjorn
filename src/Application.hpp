@@ -12,7 +12,7 @@ namespace Felina
 	class Object;
 	class UI;
 
-	class Application 
+	class Application
 	{
 		public:	
 			std::atomic<bool> isFramebufferResized = false;
@@ -20,19 +20,22 @@ namespace Felina
 			Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight);
 			~Application();
 
+			void Init();
 			void Run();
+			void CleanUp();
 			const std::string& GetName() const { return m_name; }
 
 		private:
 			void InitGlfw();
 			void InitImGui();
 			void InitScene();
-			void MainLoop();
-			void CleanUp();
 
 			void ProcessInput();
 
 			std::string m_name;
+			uint32_t m_startupWindowWidth; // Won't be updated when window gets resized
+			uint32_t m_startupWindowHeight;
+			
 			std::unique_ptr<Window> m_window = nullptr;
 			std::unique_ptr<UI> m_UI = nullptr;
 			std::unique_ptr<Scene> m_scene = nullptr;

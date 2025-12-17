@@ -12,16 +12,24 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 
-namespace Felina 
+namespace Felina
 {
+	static const std::filesystem::path DEFAULT_SCENE{"./assets/multi_textured_scene.gltf"};
+
 	Application::Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight)
-		: m_name(name)
+		: m_name(name), m_startupWindowWidth(windowWidth), m_startupWindowHeight(windowHeight)
+	{
+	}
+
+	Application::~Application() = default;
+
+	void Application::Init()
 	{
 		InitGlfw();
 
-		m_window = std::make_unique<Window>(windowWidth, windowHeight, m_name, *this);
+		m_window = std::make_unique<Window>(m_startupWindowWidth, m_startupWindowHeight, m_name, *this);
 		m_UI = std::make_unique<UI>();
-		m_scene = std::make_unique<Scene>(static_cast<float>(windowWidth), static_cast<float>(windowHeight));
+		m_scene = std::make_unique<Scene>(static_cast<float>(m_startupWindowWidth), static_cast<float>(m_startupWindowHeight));
 		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
 
 		InitImGui();
@@ -30,12 +38,37 @@ namespace Felina
 		m_renderer->UpdateDescriptorSets();
 	}
 
-	Application::~Application() = default;
-
 	void Application::Run()
 	{
-		MainLoop();
-		CleanUp();
+		while (!m_window->ShouldClose()) {
+			glfwPollEvents();
+			ProcessInput();
+
+			if(glfwGetMouseButton(m_window->GetHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+				m_scene->RotateCamera(m_mouseDeltaX, m_mouseDeltaY);
+			
+			m_UI->Update(*m_scene);
+			m_renderer->DrawFrame();
+		}
+
+		// Wait for pending GPU operations to finish
+		m_renderer->WaitIdle();		
+	}
+
+	void Application::CleanUp()
+	{
+		// Unload all resources
+		auto& rm = ResourceManager::GetInstance();
+		rm.UnloadAll();
+
+		// ImGui
+		ImGui_ImplVulkan_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+
+		// GLFW
+		m_window.reset();
+		glfwTerminate();
 	}
 
 	void Application::InitGlfw() 
@@ -58,61 +91,15 @@ namespace Felina
 
 	void Application::InitScene()
 	{	
-		/*
-		// Load materials
-		auto& rm = ResourceManager::GetInstance();
-		constexpr float ambient = 0.02f;
-		auto mat1 = std::make_unique<Material>(
-			glm::vec3(0.98, 0.1, 0.1), // Albedo
-			glm::vec3(0.1, 0.1, 0.1), // Specular
-			glm::vec4(ambient, 0.8, 0.05, 0.05) // Material info
-		);
-		auto mat2 = std::make_unique<Material>(
-			glm::vec3(0.1, 0.6, 0.7), // Albedo
-			glm::vec3(1.0, 1.0, 1.0), // Specular
-			glm::vec4(ambient, 0.2, 0.8, 0.8) // Material info
-		);
-		auto mat1ID = rm.LoadMaterial(std::move(mat1), "Opaque Material");
-		auto mat2ID = rm.LoadMaterial(std::move(mat2), "Shiny Material");
-		*/
+		LOG("[Application] Loading default scene..");
 
 		// Load default scene
-		LoadSceneFromGlTF("./assets/multi_textured_scene.glb", *m_scene, *m_renderer);
-		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f)); // TODO: include camera in the glTF
+		LoadSceneFromGlTF(DEFAULT_SCENE, *m_scene, *m_renderer);
 		
-	}
-
-	void Application::MainLoop() 
-	{
-		while (!m_window->ShouldClose()) {
-			glfwPollEvents();
-			ProcessInput();
-
-			if(glfwGetMouseButton(m_window->GetHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
-				m_scene->RotateCamera(m_mouseDeltaX, m_mouseDeltaY);
-			
-			m_UI->Update(*m_scene);
-			m_renderer->DrawFrame();
-		}
-
-		// Wait for pending GPU operations to finish
-		m_renderer->WaitIdle();
-	}
-
-	void Application::CleanUp()
-	{
-		// Unload all resources
-		auto& rm = ResourceManager::GetInstance();
-		rm.UnloadAll();
-
-		// ImGui
-		ImGui_ImplVulkan_Shutdown();
-		ImGui_ImplGlfw_Shutdown();
-		ImGui::DestroyContext();
-
-		// GLFW
-		m_window.reset();
-		glfwTerminate();
+		// TODO: include camera in the glTF
+		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f));
+		
+		LOG("[Application] Default scene loaded successfully!");
 	}
 
 	// Process mouse input and updates member variables

@@ -5,17 +5,20 @@
 // ENTRY POINT
 int main() 
 {
+	Felina::Application app{ "Felina Renderer", 1280, 720 };
 	try 
 	{
-		Felina::Application app("Felina Renderer", 1280, 720);
+		app.Init();
 		app.Run();
 	}
 	catch (const std::exception& e) 
 	{
-		std::cerr << "Incident happened: " << e.what() << "\n";
+		std::cerr << "[Main] An exception has been raised: " << e.what() << "\n";
+		app.CleanUp();
 		return EXIT_FAILURE;
 	}
 
-	std::cout << "Fin." << std::endl;
+	app.CleanUp();
+	std::cout << "[Main] Fin." << std::endl;
 	return EXIT_SUCCESS;
 }

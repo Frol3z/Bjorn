@@ -4,8 +4,7 @@
 #include <string>
 #include <iostream>
 
-#define PRINT(x) std::cout << x << ' '
-#define PRINTLN(x) std::cout << x << '\n'
+#define LOG(x) std::cout << x << '\n'
 
 namespace Felina
 {

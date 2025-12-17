@@ -721,7 +721,7 @@ namespace Felina
         for (size_t i = 0; i < m_samplers.size(); i++)
             m_samplers[i].emplace(m_device->GetDevice(), createInfos[i], nullptr);
 
-        PRINTLN("[Renderer] Initialized samplers!");
+        LOG("[Renderer] Initialized samplers!");
     }
 
     void Renderer::CreateUniformBuffers()
