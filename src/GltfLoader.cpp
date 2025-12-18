@@ -177,6 +177,7 @@ namespace Felina
 		{
 			const auto& material = model.materials[i];
 
+			// TODO: improve material system to PBR
 			auto baseColor = material.pbrMetallicRoughness.baseColorFactor;
 			auto metalness = material.pbrMetallicRoughness.metallicFactor;
 			auto roughness = material.pbrMetallicRoughness.roughnessFactor;

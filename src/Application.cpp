@@ -14,7 +14,7 @@
 
 namespace Felina
 {
-	static const std::filesystem::path DEFAULT_SCENE{"./assets/multi_textured_scene.gltf"};
+	static const std::filesystem::path DEFAULT_SCENE{"./assets/default.glb"};
 
 	Application::Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight)
 		: m_name(name), m_startupWindowWidth(windowWidth), m_startupWindowHeight(windowHeight)

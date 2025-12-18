@@ -16,14 +16,14 @@ Currently I'm working on adding texture supports on my materials.
 - simple user interface
 - full deferred rendering pipeline
 - material system using Blinn-Phong lighting model
+- texture support
 - glTF scene loading
 # Roadmap
 ## Short term
-- texture support
 - multiple lights
+- PBR materials
 - improve UX
 ## Long term
-- PBR materials
 - cascaded shadow maps
 - hybrid GI
 
@@ -62,14 +62,33 @@ cmake ..
 ![Diagram](diagram.png)
 
 ## GBuffer structure
-| Attachment # | R | G | B | A |
-|---|---|---|---|---|
-| 0 | Albedo.R | Albedo.G | Albedo.B | Unused |
-| 1 | Specular.R | Specular.G | Specular.B | Unused|
-| 2 | Ambient Coeff. | Diffuse Coeff. | Specular Coeff. | Unused |
-| 3 | Normal.X | Normal.Y | Normal.Z | Unused |
-| 4 | Depth | Depth | Depth | Depth |
-# Examples
+| Attachment # | R              | G              | B               | A      |
+| ------------ | -------------- | -------------- | --------------- | ------ |
+| 0            | Albedo.R       | Albedo.G       | Albedo.B        | Unused |
+| 1            | Specular.R     | Specular.G     | Specular.B      | Unused |
+| 2            | Ambient Coeff. | Diffuse Coeff. | Specular Coeff. | Unused |
+| 3            | Normal.X       | Normal.Y       | Normal.Z        | Unused |
+| 4            | Depth          | Depth          | Depth           | Depth  |
+
+## Descriptors
+### Geometry Pass
+| Descriptor Set Layout | Binding | Set | VS  | FS  |
+| :-------------------- | :-----: | :-: | :-: | :-: |
+| Camera                |    0    |  0  |  Y  |  N  |
+| Objects               |    0    |  1  |  Y  |  N  |
+| Materials             |    0    |  2  |  N  |  Y  |
+| Textures              |    0    |  3  |  N  |  Y  |
+| Samplers              |    1    |  3  |  N  |  Y  |
+
+| Push Constants | VS  | FS  |
+| -------------- | --- | --- |
+| Objects        | Y   | N   |
+
+### Lighting Pass
+| Descriptor Set Layout |        Binding         | Set | VS  | FS  |
+| :-------------------- | :--------------------: | :-: | :-: | :-: |
+| Camera                |           0            |  0  |  N  |  Y  |
+| GBuffer               | See attachment # above |  1  |  N  |  Y  |
 
 # References
 
