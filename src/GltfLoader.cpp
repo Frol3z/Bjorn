@@ -178,17 +178,24 @@ namespace Felina
 			const auto& material = model.materials[i];
 
 			// TODO: improve material system to PBR
+			// NOTES on `baseColor`:
+			// metal -> f0
+			// dielectric -> albedo and f0 should be set to 0.04
+			//               as a good approximation of dielectrics
+			//               (see Real Time Rendering)
 			auto baseColor = material.pbrMetallicRoughness.baseColorFactor;
 			auto metalness = material.pbrMetallicRoughness.metallicFactor;
 			auto roughness = material.pbrMetallicRoughness.roughnessFactor;
-			auto shininess = 20.0f;
 			float ambient = 0.02f;
+
+			// According to the specs, baseColorTexture should be multiplied with baseColorFactor
+			// Since Blender seems to export either one or the other this is left as TODO
 			int albedoTexIndex = material.pbrMetallicRoughness.baseColorTexture.index;
 
 			std::unique_ptr<Material> mat = std::make_unique<Material>(
 				glm::vec3(baseColor[0], baseColor[1], baseColor[2]),
-				glm::vec3(1.0, 1.0, 1.0),
-				glm::vec4(ambient, roughness, metalness, shininess),
+				glm::vec3(1.0, 1.0, 1.0), // Useless ??
+				glm::vec4(ambient, roughness, metalness, 0.0),
 				(albedoTexIndex == -1) ? -1 : textures[albedoTexIndex]
 			);
 			
