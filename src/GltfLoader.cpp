@@ -194,8 +194,7 @@ namespace Felina
 
 			std::unique_ptr<Material> mat = std::make_unique<Material>(
 				glm::vec3(baseColor[0], baseColor[1], baseColor[2]),
-				glm::vec3(1.0, 1.0, 1.0), // Useless ??
-				glm::vec4(ambient, roughness, metalness, 0.0),
+				glm::vec4(roughness, metalness, ambient, 0.0),
 				(albedoTexIndex == -1) ? -1 : textures[albedoTexIndex]
 			);
 			

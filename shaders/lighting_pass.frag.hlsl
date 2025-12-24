@@ -20,28 +20,23 @@ ConstantBuffer<CameraData> cameraData;
 
 // G-buffer (set 1)
 [[vk::combinedImageSampler]][[vk::binding(0, 1)]]
-Texture2D gAlbedo;
+Texture2D gBaseColor;
 [[vk::combinedImageSampler]][[vk::binding(0, 1)]]
-SamplerState gAlbedoSampler;
+SamplerState gBaseColorSampler;
 
 [[vk::combinedImageSampler]][[vk::binding(1, 1)]]
-Texture2D gSpecular;
-[[vk::combinedImageSampler]][[vk::binding(1, 1)]]
-SamplerState gSpecularSampler;
-
-[[vk::combinedImageSampler]][[vk::binding(2, 1)]]
 Texture2D gMaterialInfo;
-[[vk::combinedImageSampler]][[vk::binding(2, 1)]]
+[[vk::combinedImageSampler]][[vk::binding(1, 1)]]
 SamplerState gMaterialInfoSampler;
 
-[[vk::combinedImageSampler]][[vk::binding(3, 1)]]
+[[vk::combinedImageSampler]][[vk::binding(2, 1)]]
 Texture2D gNormal;
-[[vk::combinedImageSampler]][[vk::binding(3, 1)]]
+[[vk::combinedImageSampler]][[vk::binding(2, 1)]]
 SamplerState gNormalSampler;
 
-[[vk::combinedImageSampler]][[vk::binding(4, 1)]]
+[[vk::combinedImageSampler]][[vk::binding(3, 1)]]
 Texture2D gDepth;
-[[vk::combinedImageSampler]][[vk::binding(4, 1)]]
+[[vk::combinedImageSampler]][[vk::binding(3, 1)]]
 SamplerState gDepthSampler;
 
 // Hardcoded directional light
@@ -69,7 +64,7 @@ float3 diffuseBRDF(const float3 albedo, const float metalness)
  *  - hDotV is the cosine of the angle between the 
  *    sampled microfacet normal and the view direction
  *    (clamped between 0 and 1)
- *  - metals should provide the albedo as f0, while
+ *  - metals should provide the base color as f0, while
  *    dielectrics should use a value of 0.04 as a good
  *    approximation of their behaviour (see Real
  *    Time Rendering)
@@ -108,12 +103,12 @@ float G(float alphaSquared, float nDotL, float nDotV)
 
 float4 main(VertexOutput inVert) : SV_TARGET0
 {
-    float3 albedo = gAlbedo.Sample(gAlbedoSampler, inVert.uv).rgb;
+    float3 baseColor = gBaseColor.Sample(gBaseColorSampler, inVert.uv).rgb;
     //float3 spec = gSpecular.Sample(gSpecularSampler, inVert.uv).rgb;
     float4 rawMaterialInfo = gMaterialInfo.Sample(gMaterialInfoSampler, inVert.uv);
-    float ambient = rawMaterialInfo.r;
-    float roughness = rawMaterialInfo.g;
-    float metalness = rawMaterialInfo.b;
+    float roughness = rawMaterialInfo.r;
+    float metalness = rawMaterialInfo.g;
+    float ambient = rawMaterialInfo.b;
     float3 n = normalize(gNormal.Sample(gNormalSampler, inVert.uv).rgb);
     float depth = gDepth.Sample(gDepthSampler, inVert.uv).r;
     float3 fragWorldPosition = reconstructWorldPosition(depth, inVert.uv);
@@ -128,10 +123,10 @@ float4 main(VertexOutput inVert) : SV_TARGET0
     // BRDF evaluation
     float alpha = roughness * roughness;
     float alphaSquared = alpha * alpha;
-    float3 f0 = lerp(float3(0.04, 0.04, 0.04), albedo, metalness);
+    float3 f0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metalness);
     float3 fresnel = F(f0, hDotV);
     float3 specularBRDF = fresnel * D(alphaSquared, nDotH) * G(alphaSquared, nDotL, nDotV);
-    float3 combinedBRDF = (float3(1.0, 1.0, 1.0) - fresnel) * diffuseBRDF(albedo, metalness) + specularBRDF;
+    float3 combinedBRDF = (float3(1.0, 1.0, 1.0) - fresnel) * diffuseBRDF(baseColor, metalness) + specularBRDF;
     float3 fragColor = LIGHT_COL * combinedBRDF * nDotL;
     return float4(fragColor, 1.0);
 }

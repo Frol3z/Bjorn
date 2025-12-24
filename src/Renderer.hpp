@@ -37,12 +37,10 @@ namespace Felina
 
 			struct MaterialData
 			{
-				glm::vec3 albedo;
-				glm::vec3 specular;
+				glm::vec3 baseColor;
 				glm::vec4 materialInfo;
 
-				uint32_t albedoTex;
-				uint32_t specularTex;
+				uint32_t baseColorTex;
 			};
 
 			struct ObjectData

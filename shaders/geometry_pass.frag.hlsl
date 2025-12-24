@@ -4,12 +4,10 @@
 // Material data
 struct MaterialData
 {
-    float3       albedo;
-    float3     specular;
-    float4 materialInfo;
+    float3       baseColor;
+    float4    materialInfo;
     
-    uint      albedoTex;   // index to address textures[]
-    uint    specularTex;   // index to address textures[]
+    uint      baseColorTex;   // index to address textures[]
 };
 
 [[vk::binding(0, 2)]]
@@ -31,10 +29,9 @@ struct VertexOutput
 
 struct FragmentOutput 
 {
-	float4 albedo : SV_TARGET0;
-	float4 specular : SV_TARGET1;
-    float4 materialInfo : SV_TARGET2;
-	float4 normal : SV_TARGET3;
+	float4 baseColor : SV_TARGET0;
+    float4 materialInfo : SV_TARGET1;
+	float4 normal : SV_TARGET2;
 };
 
 FragmentOutput main(VertexOutput inVert)
@@ -42,17 +39,11 @@ FragmentOutput main(VertexOutput inVert)
 	FragmentOutput output;
     MaterialData m = materialBuffer[inVert.materialIndex];
     
-    // Albedo
-    if(m.albedoTex != -1)
-        output.albedo = textures[m.albedoTex].Sample(samplers[0], inVert.uv);
+    // Base Color
+    if(m.baseColorTex != -1)
+        output.baseColor = textures[m.baseColorTex].Sample(samplers[0], inVert.uv);
     else
-        output.albedo = float4(m.albedo, 1.0);
-        
-    // Specular
-    if (m.specularTex != -1)
-        output.specular = textures[m.specularTex].Sample(samplers[0], inVert.uv);
-    else
-        output.specular = float4(m.specular, 1.0);
+        output.baseColor = float4(m.baseColor, 1.0);
     
     // Material Info
     output.materialInfo = m.materialInfo;

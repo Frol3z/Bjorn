@@ -13,7 +13,7 @@ namespace Felina
 	class GBuffer
 	{
 		public:
-			enum AttachmentType { Albedo = 0, Specular, MaterialInfo, Normal, Depth };
+			enum AttachmentType { BaseColor = 0, MaterialInfo, Normal, Depth };
 			struct Attachment
 			{
 				AttachmentType type;
@@ -40,8 +40,7 @@ namespace Felina
 			);
 
 		private:
-			void CreateAlbedoAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
-			void CreateSpecularAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
+			void CreateBaseColorAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
 			void CreateMaterialInfoAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
 			void CreateNormalAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
 			void CreateDepthAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);

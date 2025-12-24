@@ -383,16 +383,13 @@ namespace Felina
 
             // Fill the MaterialData struct
             MaterialData matData{};
-            matData.albedo = mat->GetAlbedo();
-            matData.specular = mat->GetSpecular();
+            matData.baseColor = mat->GetBaseColor();
             matData.materialInfo = mat->GetCoefficients();
 
             // If the texture is defined use the mapping to get the
             // correct texture index, else -1
-            TextureID texId = mat->GetAlbedoTexture();
-            matData.albedoTex = (texId != -1) ? texturesMapping[texId] : texId;
-            texId = mat->GetSpecularTexture();
-            matData.specularTex = (texId != -1) ? texturesMapping[texId] : texId;
+            TextureID texId = mat->GetBaseColorTex();
+            matData.baseColorTex = (texId != -1) ? texturesMapping[texId] : texId;
             
             materialDatas.push_back(matData);
 
@@ -759,7 +756,7 @@ namespace Felina
         // TODO: remove hardcoded number of attachments
         // NOTE: the pool is created before the GBuffer because it
         // uses the pool to allocate the attachments sets
-        uint32_t attachmentsCount = 4 * MAX_FRAMES_IN_FLIGHT;
+        uint32_t attachmentsCount = 3 * MAX_FRAMES_IN_FLIGHT;
         std::array<vk::DescriptorPoolSize, 5> poolSizes {
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eStorageBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
