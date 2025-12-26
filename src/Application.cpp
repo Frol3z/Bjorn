@@ -14,7 +14,8 @@
 
 namespace Felina
 {
-	static const std::filesystem::path DEFAULT_SCENE{"./assets/BRDFs.glb"};
+	static const std::filesystem::path DEFAULT_SCENE{ "./assets/pbr.glb" };
+	static const std::filesystem::path DEFAULT_SKYBOX{ "./assets/skybox/" };
 
 	Application::Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight)
 		: m_name(name), m_startupWindowWidth(windowWidth), m_startupWindowHeight(windowHeight)
@@ -91,14 +92,14 @@ namespace Felina
 
 	void Application::InitScene()
 	{	
-		LOG("[Application] Loading default scene..");
+		LOG("[Application] Loading skybox...");
+		m_renderer->LoadSkybox(DEFAULT_SKYBOX);
+		LOG("[Application] Skybox loaded successfully!");
 
-		// Load default scene
+		LOG("[Application] Loading default scene...");
 		LoadSceneFromGlTF(DEFAULT_SCENE, *m_scene, *m_renderer);
-		
 		// TODO: include camera in the glTF
 		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f));
-		
 		LOG("[Application] Default scene loaded successfully!");
 	}
 

@@ -3,7 +3,9 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <vk_mem_alloc.h>
 #include <glm/glm.hpp>
+
 #include <optional>
+#include <filesystem>
 
 // Required for MaterialID and MeshID definitions
 #include "ResourceManager.hpp"
@@ -41,6 +43,7 @@ namespace Felina
 				glm::vec4 materialInfo;
 
 				uint32_t baseColorTex;
+				uint32_t materialInfoTex;
 			};
 
 			struct ObjectData
@@ -86,6 +89,7 @@ namespace Felina
 			void WaitIdle();
 			void LoadMesh(Mesh& mesh);
 			void LoadTexture(const Texture& texture, const void* rawImageData, size_t rawImageSize);
+			void LoadSkybox(const std::filesystem::path& folderPath);
 			void UpdateDescriptorSets(); 
 
 			const Device& GetDevice() const;

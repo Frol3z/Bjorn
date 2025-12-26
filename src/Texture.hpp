@@ -16,6 +16,11 @@ namespace Felina
 			);
 			~Texture();
 
+			const bool IsCubemap() {
+				return (m_imageCreateInfo.imageType == vk::ImageType::e2D)
+					&& (m_imageCreateInfo.flags & vk::ImageCreateFlagBits::eCubeCompatible)
+					&& (m_imageCreateInfo.arrayLayers == 6);
+			}
 			const vk::Image& GetHandle() const { return m_image; };
 			const vk::raii::ImageView& GetImageView() const { return m_imageView; }
 			const vk::Format GetFormat() const { return m_imageCreateInfo.format; }

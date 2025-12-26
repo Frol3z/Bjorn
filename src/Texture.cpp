@@ -2,6 +2,8 @@
 
 #include "Device.hpp"
 
+#include "Common.hpp"
+
 namespace Felina
 {
 	Texture::Texture(const Device& device, const vk::ImageCreateInfo& imageInfo, const VmaAllocationCreateInfo& allocInfo)
@@ -18,7 +20,7 @@ namespace Felina
 			nullptr
 		);
 		if (res != VK_SUCCESS)
-			throw std::runtime_error("[IMAGE] vmaCreateImage: " + std::to_string(res));
+			throw std::runtime_error("[Texture] vmaCreateImage: " + std::to_string(res));
 
 		m_imageCreateInfo = imageInfo;
 		m_image = vk::Image(raw);
@@ -44,29 +46,37 @@ namespace Felina
 		imageViewCreateInfo.image = m_image;
 		imageViewCreateInfo.format = m_imageCreateInfo.format;
 
-		// .viewType
-		// NOTE: may be updated/moved if more complex combinations are needed
-		switch (m_imageCreateInfo.imageType)
+		if (IsCubemap())
 		{
-			case vk::ImageType::e1D:
-				imageViewCreateInfo.viewType =
-					m_imageCreateInfo.arrayLayers > 1 ?
-					vk::ImageViewType::e1DArray :
-					vk::ImageViewType::e1D;
-				break;
-
-			case vk::ImageType::e2D:
-				imageViewCreateInfo.viewType =
-					m_imageCreateInfo.arrayLayers > 1 ?
-					vk::ImageViewType::e2DArray :
-					vk::ImageViewType::e2D;
-				break;
-
-			case vk::ImageType::e3D:
-				// 3D images use e3D view type
-				imageViewCreateInfo.viewType = vk::ImageViewType::e3D;
-				break;
+			imageViewCreateInfo.viewType = vk::ImageViewType::eCube;
 		}
+		else
+		{
+			// .viewType
+			// NOTE: may be updated/moved if more complex combinations are needed
+			switch (m_imageCreateInfo.imageType)
+			{
+				case vk::ImageType::e1D:
+					imageViewCreateInfo.viewType =
+						m_imageCreateInfo.arrayLayers > 1 ?
+						vk::ImageViewType::e1DArray :
+						vk::ImageViewType::e1D;
+					break;
+
+				case vk::ImageType::e2D:
+					imageViewCreateInfo.viewType =
+						m_imageCreateInfo.arrayLayers > 1 ?
+						vk::ImageViewType::e2DArray :
+						vk::ImageViewType::e2D;
+					break;
+
+				case vk::ImageType::e3D:
+					// 3D images use e3D view type
+					imageViewCreateInfo.viewType = vk::ImageViewType::e3D;
+					break;
+			}
+		}
+
 
 		// .subresourceRange
 		vk::ImageAspectFlags aspect{};

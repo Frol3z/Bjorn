@@ -8,16 +8,20 @@ struct MaterialData
     float4    materialInfo;
     
     uint      baseColorTex;   // index to address textures[]
+    uint   materialInfoTex;   // index to address textures[]  
 };
 
 [[vk::binding(0, 2)]]
 StructuredBuffer<MaterialData> materialBuffer;
 
 [[vk::binding(0, 3)]]
-Texture2D textures[MAX_TEXTURES];
+SamplerState samplers[MAX_SAMPLERS]; // NOTE: currently always defaulting to samplers[0]
 
 [[vk::binding(1, 3)]]
-SamplerState samplers[MAX_SAMPLERS]; // NOTE: currently always defaulting to samplers[0]
+Texture2D textures[MAX_TEXTURES];
+
+[[vk::binding(2, 3)]]
+TextureCube skybox;
 
 struct VertexOutput
 {
@@ -46,7 +50,10 @@ FragmentOutput main(VertexOutput inVert)
         output.baseColor = float4(m.baseColor, 1.0);
     
     // Material Info
-    output.materialInfo = m.materialInfo;
+    if (m.materialInfoTex != -1)
+        output.materialInfo = textures[m.materialInfoTex].Sample(samplers[0], inVert.uv);
+    else
+        output.materialInfo = m.materialInfo;
     
     // Normal
     output.normal = float4(normalize(inVert.normal), 1.0);

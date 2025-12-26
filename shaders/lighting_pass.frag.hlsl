@@ -106,9 +106,9 @@ float4 main(VertexOutput inVert) : SV_TARGET0
     float3 baseColor = gBaseColor.Sample(gBaseColorSampler, inVert.uv).rgb;
     //float3 spec = gSpecular.Sample(gSpecularSampler, inVert.uv).rgb;
     float4 rawMaterialInfo = gMaterialInfo.Sample(gMaterialInfoSampler, inVert.uv);
-    float roughness = rawMaterialInfo.r;
-    float metalness = rawMaterialInfo.g;
-    float ambient = rawMaterialInfo.b;
+    float roughness = rawMaterialInfo.g;
+    float metalness = rawMaterialInfo.b;
+    float ambient = 0.02;
     float3 n = normalize(gNormal.Sample(gNormalSampler, inVert.uv).rgb);
     float depth = gDepth.Sample(gDepthSampler, inVert.uv).r;
     float3 fragWorldPosition = reconstructWorldPosition(depth, inVert.uv);

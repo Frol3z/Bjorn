@@ -16,6 +16,7 @@
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <backends/imgui_impl_vulkan.h>
+#include <stb_image.h>
 
 #include <iostream>
 #include <filesystem>
@@ -175,27 +176,79 @@ namespace Felina
         m_device->CopyBufferToImage(stagingBuffer, texture, size);
     }
 
+    void Renderer::LoadSkybox(const std::filesystem::path& folderPath)
+    {
+        constexpr int requiredComponents = 4;
+        constexpr int faceCount = 6;
+
+        std::array<unsigned char*, faceCount> faces { };
+        int width{ 0 };
+        int height{ 0 };
+
+        // Load the faces images
+        size_t i { 0 };
+        for (auto const& dirEntry : std::filesystem::directory_iterator{ folderPath })
+        {
+            const std::string& path = dirEntry.path().string();
+            LOG("[Renderer] Loading " + path + "...");
+
+            int w, h, c;
+            faces[i] = stbi_load(path.c_str(), &w, &h, &c, requiredComponents);
+            if (!faces[i])
+                throw std::runtime_error("[Renderer] Failed to load skybox face #" + std::to_string(i));
+
+            if(i == 0)
+            {
+                width = w;
+                height = h;
+            }
+            else
+            {
+                assert(width == w && height == h);
+            }
+            i++;
+        }
+        assert(i == 6);
+
+        // Pack the data into a single buffer
+        size_t faceSize = width * height * requiredComponents;
+        size_t cubeMapSize = faceSize * faceCount;
+        std::vector<unsigned char> cubeMapData(cubeMapSize);
+        for (size_t face = 0; face < 6; face++)
+        {
+            memcpy(
+                cubeMapData.data() + face * faceSize, // Dst
+                faces[face],                          // Src
+                faceSize                              // Size
+            );
+        }
+
+        // Create texture
+        vk::ImageCreateInfo imageInfo{
+            .flags          = vk::ImageCreateFlagBits::eCubeCompatible, // !
+            .imageType      = vk::ImageType::e2D,
+            .format         = vk::Format::eR8G8B8A8Srgb,
+            .extent         = vk::Extent3D{ static_cast<uint32_t>(width),static_cast<uint32_t>(height), 1 },
+            .mipLevels      = 1,
+            .arrayLayers    = 6, // !
+            .samples        = vk::SampleCountFlagBits::e1,
+            .tiling         = vk::ImageTiling::eOptimal,
+            .usage          = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+            .sharingMode    = vk::SharingMode::eExclusive,
+            .initialLayout  = vk::ImageLayout::eUndefined
+        };
+        VmaAllocationCreateInfo allocInfo = { .usage = VMA_MEMORY_USAGE_AUTO };
+        std::unique_ptr<Texture> texture = std::make_unique<Texture>(*m_device, imageInfo, allocInfo);
+
+        // Load texture
+        // TODO: Renderer calling RM calling Renderer again, I should fix this weird process
+        ResourceManager::GetInstance().LoadTexture(std::move(texture), "Skybox", cubeMapData.data(), cubeMapSize, *this);
+    }
+
     void Renderer::UpdateDescriptorSets()
     {
         // Bind the textures and samplers to their descriptor set (shared between frames)
        {
-           // Textures
-           auto& rm = ResourceManager::GetInstance();
-           const auto& textures = rm.GetTextures();
-           std::array<vk::DescriptorImageInfo, MAX_TEXTURES> imageInfos;
-
-           assert(textures.size() < MAX_TEXTURES && "[Renderer] Loaded textures surpass MAX_TEXTURES!");
-           size_t i = 0;
-           for (const auto& [id, resource] : textures)
-           {
-               imageInfos[i] = {
-                   .sampler = nullptr,
-                   .imageView = resource.resource->GetImageView(),
-                   .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-               };
-               ++i;
-           }
-
            // Samplers
            std::array<vk::DescriptorImageInfo, MAX_SAMPLERS> samplerInfos;
            for (size_t i = 0; i < samplerInfos.size(); i++)
@@ -207,23 +260,61 @@ namespace Felina
                };
            }
 
+           // Textures (array + skybox cubemap)
+           auto& rm = ResourceManager::GetInstance();
+           const auto& textures = rm.GetTextures();
+           std::array<vk::DescriptorImageInfo, MAX_TEXTURES> imageInfos;
+           vk::DescriptorImageInfo skyboxInfo; // Skybox doesn't count in MAX_TEXTURES
+
+           assert(textures.size() < (MAX_TEXTURES + 1) && "[Renderer] Loaded textures surpass MAX_TEXTURES!");
+           size_t i = 0;
+           for (const auto& [id, resource] : textures)
+           {
+               // Check wether it is the skybox
+               if (resource.resource->IsCubemap())
+               {
+                   skyboxInfo = {
+                       .sampler = nullptr,
+                       .imageView = resource.resource->GetImageView(),
+                       .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+                   };
+               }
+               else
+               {
+                   imageInfos[i] = {
+                       .sampler = nullptr,
+                       .imageView = resource.resource->GetImageView(),
+                       .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+                   };
+                   ++i;
+               }
+           }
+
            // Descriptor writes
-           std::array<vk::WriteDescriptorSet, 2> writes;
+           std::array<vk::WriteDescriptorSet, 3> writes;
            writes[0] = {
+             .dstSet = m_textureDescriptorSets,
+             .dstBinding = 0, // samplers
+             .dstArrayElement = 0,
+             .descriptorCount = static_cast<uint32_t>(samplerInfos.size()),
+             .descriptorType = vk::DescriptorType::eSampler,
+             .pImageInfo = samplerInfos.data()
+           };
+           writes[1] = {
                 .dstSet = m_textureDescriptorSets,
-                .dstBinding = 0, // texture
+                .dstBinding = 1, // texture
                 .dstArrayElement = 0,
                 .descriptorCount = static_cast<uint32_t>(imageInfos.size()),
                 .descriptorType = vk::DescriptorType::eSampledImage,
                 .pImageInfo = imageInfos.data()
            };
-           writes[1] = {
+           writes[2] = {
              .dstSet = m_textureDescriptorSets,
-             .dstBinding = 1, // samplers
+             .dstBinding = 2, // skybox
              .dstArrayElement = 0,
-             .descriptorCount = static_cast<uint32_t>(samplerInfos.size()),
-             .descriptorType = vk::DescriptorType::eSampler,
-             .pImageInfo = samplerInfos.data()
+             .descriptorCount = 1,
+             .descriptorType = vk::DescriptorType::eSampledImage,
+             .pImageInfo = &skyboxInfo
            };
            m_device->GetDevice().updateDescriptorSets(writes, {});
        }
@@ -370,7 +461,11 @@ namespace Felina
         auto& texturesMapping = m_textureIDToArrayID[m_currentFrame];
         uint32_t index = 0;
         for (const auto& [id, res] : rm.GetTextures())
+        {
+            if (res.resource->IsCubemap())
+                continue;
             texturesMapping[id] = index++;
+        }
 
         // Fill the material data storage buffer
         std::vector<MaterialData> materialDatas;
@@ -384,12 +479,15 @@ namespace Felina
             // Fill the MaterialData struct
             MaterialData matData{};
             matData.baseColor = mat->GetBaseColor();
-            matData.materialInfo = mat->GetCoefficients();
+            matData.materialInfo = mat->GetMetallicRoughness();
 
             // If the texture is defined use the mapping to get the
             // correct texture index, else -1
-            TextureID texId = mat->GetBaseColorTex();
+            TextureID texId = mat->GetBaseColorTexture();
             matData.baseColorTex = (texId != -1) ? texturesMapping[texId] : texId;
+
+            texId = mat->GetMetallicRoughnessTexture();
+            matData.materialInfoTex = (texId != -1) ? texturesMapping[texId] : texId;
             
             materialDatas.push_back(matData);
 
@@ -567,21 +665,29 @@ namespace Felina
         m_materialSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), materialLayout);
 
         // Textures and sampler set layouts
-        // Binding 0 -> Textures array
-        // Binding 1 -> Samplers array
-        constexpr uint32_t bindingCount = 2;
+        // Binding 0 -> Samplers array
+        // Binding 1 -> Textures array
+        // Binding 2 -> Skybox
+        constexpr uint32_t bindingCount = 3;
         std::array<vk::DescriptorSetLayoutBinding, bindingCount> bindings;
         bindings[0] = {
             .binding = 0,
-            .descriptorType = vk::DescriptorType::eSampledImage,
-            .descriptorCount = MAX_TEXTURES,
+            .descriptorType = vk::DescriptorType::eSampler,
+            .descriptorCount = MAX_SAMPLERS,
             .stageFlags = vk::ShaderStageFlagBits::eFragment,
             .pImmutableSamplers = nullptr
         };
         bindings[1] = {
             .binding = 1,
-            .descriptorType = vk::DescriptorType::eSampler,
-            .descriptorCount = MAX_SAMPLERS,
+            .descriptorType = vk::DescriptorType::eSampledImage,
+            .descriptorCount = MAX_TEXTURES,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+            .pImmutableSamplers = nullptr
+        };
+        bindings[2] = {
+            .binding = 2,
+            .descriptorType = vk::DescriptorType::eSampledImage,
+            .descriptorCount = 1,
             .stageFlags = vk::ShaderStageFlagBits::eFragment,
             .pImmutableSamplers = nullptr
         };
@@ -766,7 +872,7 @@ namespace Felina
             },
 
             // These reserved space will be used by ONE descriptor set (see below)
-            vk::DescriptorPoolSize { .type = vk::DescriptorType::eSampledImage, .descriptorCount = MAX_TEXTURES },
+            vk::DescriptorPoolSize { .type = vk::DescriptorType::eSampledImage, .descriptorCount = MAX_TEXTURES + 1 },
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eSampler, .descriptorCount = MAX_SAMPLERS }
         };
         vk::DescriptorPoolCreateInfo poolInfo{

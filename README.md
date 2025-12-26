@@ -76,8 +76,9 @@ cmake ..
 | Camera                |    0    |  0  |  Y  |  N  |
 | Objects               |    0    |  1  |  Y  |  N  |
 | Materials             |    0    |  2  |  N  |  Y  |
-| Textures              |    0    |  3  |  N  |  Y  |
-| Samplers              |    1    |  3  |  N  |  Y  |
+| Samplers              |    0    |  3  |  N  |  Y  | *
+| Textures              |    1    |  3  |  N  |  Y  | *
+| Skybox                |    2    |  3  |  N  |  Y  | *
 
 | Push Constants | VS  | FS  |
 | -------------- | --- | --- |

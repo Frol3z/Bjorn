@@ -191,11 +191,13 @@ namespace Felina
 			// According to the specs, baseColorTexture should be multiplied with baseColorFactor
 			// Since Blender seems to export either one or the other this is left as TODO
 			int albedoTexIndex = material.pbrMetallicRoughness.baseColorTexture.index;
+			int metallicRoughnessTexIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index;
 
 			std::unique_ptr<Material> mat = std::make_unique<Material>(
 				glm::vec3(baseColor[0], baseColor[1], baseColor[2]),
-				glm::vec4(roughness, metalness, ambient, 0.0),
-				(albedoTexIndex == -1) ? -1 : textures[albedoTexIndex]
+				glm::vec4(0.0, roughness, metalness, 0.0),
+				(albedoTexIndex == -1) ? -1 : textures[albedoTexIndex],
+				(metallicRoughnessTexIndex == -1) ? -1 : textures[metallicRoughnessTexIndex]
 			);
 			
 			MaterialID id = rm.LoadMaterial(std::move(mat), material.name);
