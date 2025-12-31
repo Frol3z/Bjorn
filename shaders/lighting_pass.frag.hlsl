@@ -1,3 +1,5 @@
+#define MAX_TEXTURES 10 // must match the one in Renderer.hpp
+#define MAX_SAMPLERS 2
 #define PI 3.14159265358979323846
 
 struct VertexOutput
@@ -38,6 +40,15 @@ SamplerState gNormalSampler;
 Texture2D gDepth;
 [[vk::combinedImageSampler]][[vk::binding(3, 1)]]
 SamplerState gDepthSampler;
+
+[[vk::binding(0, 2)]]
+SamplerState samplers[MAX_SAMPLERS]; // NOTE: currently always defaulting to samplers[0]
+
+[[vk::binding(1, 2)]]
+Texture2D textures[MAX_TEXTURES];
+
+[[vk::binding(2, 2)]]
+TextureCube skybox;
 
 // Hardcoded directional light
 static const float3 LIGHT_DIR = float3(1.0, 1.0, -1.0);
@@ -126,7 +137,14 @@ float4 main(VertexOutput inVert) : SV_TARGET0
     float3 f0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metalness);
     float3 fresnel = F(f0, hDotV);
     float3 specularBRDF = fresnel * D(alphaSquared, nDotH) * G(alphaSquared, nDotL, nDotV);
+    
+    // TODO: add environment mapping
+    //float3 r = reflect(-v, n);
+    //float rDotN = max(dot(r, v), 0.0);
+    //float3 indirectLighting = F(f0, rDotN) * skybox.Sample(samplers[1], r).rgb; // Environment map
+    
     float3 combinedBRDF = (float3(1.0, 1.0, 1.0) - fresnel) * diffuseBRDF(baseColor, metalness) + specularBRDF;
-    float3 fragColor = LIGHT_COL * combinedBRDF * nDotL;
-    return float4(fragColor, 1.0);
+    float3 directLighting = LIGHT_COL * combinedBRDF * nDotL;
+    
+    return float4(directLighting, 1.0);
 }

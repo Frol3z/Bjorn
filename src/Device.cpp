@@ -83,12 +83,20 @@ namespace Felina
         );
 
         // Memory transfer
+        const auto range = dst.GetImageSubresourceRange();
+        uint32_t layerCount = range.layerCount;
+        uint32_t baseLayer = range.baseArrayLayer;
         vk::BufferImageCopy region
         {
             .bufferOffset = 0,
             .bufferRowLength = 0,
             .bufferImageHeight = 0,
-            .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1}, // TODO: remove hardcoded
+            .imageSubresource = {
+                vk::ImageAspectFlagBits::eColor, // aspectMsk
+                0, // mip
+                baseLayer, // baseLayer
+                layerCount // layerCount
+        },
             .imageOffset = {0, 0, 0}, 
             .imageExtent = dst.GetExtent()
         };

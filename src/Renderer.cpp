@@ -186,6 +186,7 @@ namespace Felina
         int height{ 0 };
 
         // Load the faces images
+        stbi_set_flip_vertically_on_load(false);
         size_t i { 0 };
         for (auto const& dirEntry : std::filesystem::directory_iterator{ folderPath })
         {
@@ -743,7 +744,7 @@ namespace Felina
         pipelineBuilder.DisableBackfaceCulling(); // To avoid culling the fullscreen triangle
         pipelineBuilder.SetColorBlending(1); // 1 attachment -> swapchain image
         pipelineBuilder.SetPipelineLayout(
-            std::vector<vk::DescriptorSetLayout>{ m_cameraSetLayout, gBuffer->GetDescriptorSetLayout() },
+            std::vector<vk::DescriptorSetLayout>{ m_cameraSetLayout, gBuffer->GetDescriptorSetLayout(), m_textureSetLayout },
             std::vector<vk::PushConstantRange>{}
         );
         pipelineBuilder.SetAttachmentsFormat(std::vector<vk::Format>{ m_swapchain->GetSurfaceFormat().format }, vk::Format::eUndefined); // no depth attachment
@@ -1138,7 +1139,7 @@ namespace Felina
         // Bind descriptor sets (camera UBO, G-buffer)
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics, m_defLightingPipelineLayout, 0,
-            { m_cameraDescriptorSets[m_currentFrame], gBuffer->GetDescriptorSet() }, 
+            { m_cameraDescriptorSets[m_currentFrame], gBuffer->GetDescriptorSet(), m_textureDescriptorSets }, 
             nullptr
         );
 
