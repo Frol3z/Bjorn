@@ -114,17 +114,24 @@ float G(float alphaSquared, float nDotL, float nDotV)
 
 float4 main(VertexOutput inVert) : SV_TARGET0
 {
+    float depth = gDepth.Sample(gDepthSampler, inVert.uv).r;
+    float3 fragWorldPosition = reconstructWorldPosition(depth, inVert.uv);
+    float3 v = normalize(cameraData.position - fragWorldPosition);
+    
+    // If the fragment belongs to the background then the skybox will be sampled
+    if (depth >= 1.0)
+    {
+        return skybox.Sample(samplers[1], -v);
+    }
+    
+    // Else lighting computation will be executed
     float3 baseColor = gBaseColor.Sample(gBaseColorSampler, inVert.uv).rgb;
-    //float3 spec = gSpecular.Sample(gSpecularSampler, inVert.uv).rgb;
     float4 rawMaterialInfo = gMaterialInfo.Sample(gMaterialInfoSampler, inVert.uv);
     float roughness = rawMaterialInfo.g;
     float metalness = rawMaterialInfo.b;
-    float ambient = 0.02;
+    float ambient = 0.01;
     float3 n = normalize(gNormal.Sample(gNormalSampler, inVert.uv).rgb);
-    float depth = gDepth.Sample(gDepthSampler, inVert.uv).r;
-    float3 fragWorldPosition = reconstructWorldPosition(depth, inVert.uv);
     float3 l = -normalize(LIGHT_DIR);
-    float3 v = normalize(cameraData.position - fragWorldPosition);
     float3 h = normalize(l + v);
     float nDotL = max(dot(l, n), 0.0);
     float nDotH = max(dot(n, h), 0.0);
@@ -137,7 +144,6 @@ float4 main(VertexOutput inVert) : SV_TARGET0
     float3 f0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metalness);
     float3 fresnel = F(f0, hDotV);
     float3 specularBRDF = fresnel * D(alphaSquared, nDotH) * G(alphaSquared, nDotL, nDotV);
-    
     // TODO: add environment mapping
     //float3 r = reflect(-v, n);
     //float rDotN = max(dot(r, v), 0.0);
@@ -146,5 +152,5 @@ float4 main(VertexOutput inVert) : SV_TARGET0
     float3 combinedBRDF = (float3(1.0, 1.0, 1.0) - fresnel) * diffuseBRDF(baseColor, metalness) + specularBRDF;
     float3 directLighting = LIGHT_COL * combinedBRDF * nDotL;
     
-    return float4(directLighting, 1.0);
+    return float4(directLighting + (1.0 - metalness) * ambient * baseColor, 1.0);
 }

@@ -14,6 +14,8 @@ namespace Felina
 
 	class Application
 	{
+		// TODO: move input-related functions to a dedicated class
+
 		public:	
 			std::atomic<bool> isFramebufferResized = false;
 		

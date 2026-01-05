@@ -186,7 +186,6 @@ namespace Felina
         int height{ 0 };
 
         // Load the faces images
-        stbi_set_flip_vertically_on_load(false);
         size_t i { 0 };
         for (auto const& dirEntry : std::filesystem::directory_iterator{ folderPath })
         {
@@ -244,6 +243,7 @@ namespace Felina
         // Load texture
         // TODO: Renderer calling RM calling Renderer again, I should fix this weird process
         ResourceManager::GetInstance().LoadTexture(std::move(texture), "Skybox", cubeMapData.data(), cubeMapSize, *this);
+        // TODO: free stb_image_data
     }
 
     void Renderer::UpdateDescriptorSets()

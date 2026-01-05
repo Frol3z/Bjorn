@@ -16,6 +16,10 @@ namespace Felina
 {
 	static const std::filesystem::path DEFAULT_SCENE{ "./assets/pbr.glb" };
 	static const std::filesystem::path DEFAULT_SKYBOX{ "./assets/skybox/" };
+	
+	// Temporary solution before moving everything in an Input class
+	static double g_mouseScroll{ 0.0 };
+	void ScrollCallback(GLFWwindow* window, double xOffset, double yOffset);
 
 	Application::Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight)
 		: m_name(name), m_startupWindowWidth(windowWidth), m_startupWindowHeight(windowHeight)
@@ -29,6 +33,8 @@ namespace Felina
 		InitGlfw();
 
 		m_window = std::make_unique<Window>(m_startupWindowWidth, m_startupWindowHeight, m_name, *this);
+		glfwSetScrollCallback(m_window->GetHandle(), ScrollCallback);
+
 		m_UI = std::make_unique<UI>();
 		m_scene = std::make_unique<Scene>(static_cast<float>(m_startupWindowWidth), static_cast<float>(m_startupWindowHeight));
 		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
@@ -45,8 +51,20 @@ namespace Felina
 			glfwPollEvents();
 			ProcessInput();
 
-			if(glfwGetMouseButton(m_window->GetHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
-				m_scene->RotateCamera(m_mouseDeltaX, m_mouseDeltaY);
+			// TODO: 
+			// - move this into an UpdateCamera function
+			// - fix the double sensitivity issue
+			// - expose sensitivity in the UI
+			auto& camera = m_scene->GetCamera();
+			if (glfwGetMouseButton(m_window->GetHandle(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+				camera.Rotate(m_mouseDeltaX, m_mouseDeltaY);
+			else if (glfwGetMouseButton(m_window->GetHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+				camera.Pan(0.05f * m_mouseDeltaX, 0.05f * m_mouseDeltaY);
+			if (g_mouseScroll != 0.0)
+			{
+				camera.Dolly(g_mouseScroll);
+				g_mouseScroll = 0.0;
+			}
 			
 			m_UI->Update(*m_scene);
 			m_renderer->DrawFrame();
@@ -124,5 +142,11 @@ namespace Felina
 		// Update stored mouse position
 		m_mouseX = xpos;
 		m_mouseY = ypos;
+	}
+
+	// For a classic vertical mouse-wheel xOffset should be ignored 
+	void ScrollCallback(GLFWwindow* window, double xOffset, double yOffset)
+	{
+		g_mouseScroll = 0.35f * yOffset;
 	}
 }

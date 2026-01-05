@@ -1,8 +1,8 @@
 #include "Camera.hpp"
 
-#include <glm/gtc/matrix_transform.hpp>
+#include "Common.hpp"
 
-#include <iostream>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace Felina
 {
@@ -23,6 +23,24 @@ namespace Felina
 		m_position = totalRotation * glm::vec4(m_position, 1.0f);
 
 		ComputeLocalCoordinateSystem();
+		ComputeViewMatrix();
+	}
+
+	void Camera::Pan(double deltaX, double deltaY)
+	{
+		glm::vec3 offset = static_cast<float>(deltaX) * m_localRight
+			+ static_cast<float>(-deltaY) * m_localUp; // Sign flipped!
+		m_position += offset;
+		m_target += offset;
+		ComputeLocalCoordinateSystem();
+		ComputeViewMatrix();
+	}
+
+	void Camera::Dolly(double amount)
+	{
+		glm::vec3 offset = static_cast<float>(amount) * m_localForward;
+		m_position += offset;
+		m_target += offset;
 		ComputeViewMatrix();
 	}
 
@@ -70,11 +88,16 @@ namespace Felina
 		}
 		m_localRight = glm::normalize(glm::cross(m_localForward, WORLD_UP));
 		m_localUp = glm::normalize(glm::cross(m_localRight, m_localForward));
+		
+		LOG(std::to_string(m_localForward.x) + ' '
+			+ std::to_string(m_localForward.y) + ' '
+			+ std::to_string(m_localForward.z)
+		);
 	}
 
 	void Camera::ComputeViewMatrix()
 	{
-		m_viewMatrix = glm::lookAt(m_position, glm::vec3(0.0f), m_localUp);
+		m_viewMatrix = glm::lookAt(m_position, m_target, m_localUp);
 		ComputeInvViewProj();
 	}
 
