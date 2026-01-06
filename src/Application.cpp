@@ -76,22 +76,7 @@ namespace Felina
 		while (!m_window->ShouldClose()) {
 			glfwPollEvents();
 			m_input->Update(*m_window);
-
-			// TODO: 
-			// - move this into an UpdateCamera function
-			// - fix the double sensitivity issue
-			// - expose sensitivity in the UI
-			auto& camera = m_scene->GetCamera();
-			GLFWwindow* windowHandle = m_window->GetHandle();
-			if (glfwGetMouseButton(windowHandle, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-				camera.Rotate(m_input->mouseDeltaX, m_input->mouseDeltaY);
-			else if (glfwGetMouseButton(windowHandle, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
-				camera.Pan(0.05f * m_input->mouseDeltaX, 0.05f * m_input->mouseDeltaY);
-
-			double mouseScroll = m_input->GetMouseScroll();
-			if (mouseScroll != 0.0)
-				camera.Dolly(mouseScroll);
-			
+			UpdateCamera();
 			m_UI->Update(*m_scene);
 			m_renderer->DrawFrame();
 		}
@@ -145,5 +130,25 @@ namespace Felina
 		// TODO: include camera in the glTF
 		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f));
 		LOG("[Application] Default scene loaded successfully!");
+	}
+
+	void Application::UpdateCamera()
+	{
+		// TODO: 
+		// - fix the double sensitivity issue
+		// - expose sensitivity in the UI
+		auto& camera = m_scene->GetCamera();
+		GLFWwindow* win = m_window->GetHandle();
+
+		// Mouse buttons -> Panning and orbiting
+		if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+			camera.Rotate(m_input->mouseDeltaX, m_input->mouseDeltaY);
+		else if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+			camera.Pan(Input::PAN_SENSITIVITY * m_input->mouseDeltaX, Input::PAN_SENSITIVITY * m_input->mouseDeltaY);
+
+		// Mouse scroll-wheel -> Dolly
+		double mouseScroll = m_input->GetMouseScroll();
+		if (mouseScroll != 0.0)
+			camera.Dolly(mouseScroll);
 	}
 }

@@ -19,8 +19,8 @@ namespace Felina
 		ypos /= window.GetHeight();
 
 		// Compute delta
-		mouseDeltaX = (m_mouseX - xpos) * sensitivity;
-		mouseDeltaY = (m_mouseY - ypos) * sensitivity;
+		mouseDeltaX = (m_mouseX - xpos) * MOUSE_SENSITIVITY;
+		mouseDeltaY = (m_mouseY - ypos) * MOUSE_SENSITIVITY;
 
 		// Update stored mouse position
 		m_mouseX = xpos;

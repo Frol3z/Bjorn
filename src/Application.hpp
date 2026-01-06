@@ -44,6 +44,8 @@ namespace Felina
 			void InitImGui();
 			void InitScene();
 
+			void UpdateCamera();
+
 			std::string m_name;
 			bool m_isFramebufferResized;
 			uint32_t m_startupWindowWidth; // Won't be updated when window gets resized
