@@ -59,7 +59,7 @@ cmake ..
 6. Build and run the project.
 
 # Architecture
-![Diagram](diagram.png)
+![Diagram](diagram.jpg)
 
 ## GBuffer structure
 | Attachment # | R              | G              | B               | A      |

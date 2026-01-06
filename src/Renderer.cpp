@@ -78,7 +78,7 @@ namespace Felina
         m_device->GetPresentQueue().waitIdle();
 
         // Check if window has been resized/minimize before trying to acquire next image
-        if (m_app.isFramebufferResized.load()) {
+        if (m_app.IsFramebufferResized()) {
             UpdateOnFramebufferResized();
             return;
         }
@@ -90,7 +90,7 @@ namespace Felina
 
         // Check if the surface is still compatible with the swapchain or if it was resized/minimized
         // !!! Checking m_IsFramebufferResized guarantees prevents presentation to an invalid surface
-        if (result == vk::Result::eErrorOutOfDateKHR || m_app.isFramebufferResized.load()) {
+        if (result == vk::Result::eErrorOutOfDateKHR || m_app.IsFramebufferResized()) {
             UpdateOnFramebufferResized();
             return;
         }
@@ -128,7 +128,7 @@ namespace Felina
         result = m_device->GetPresentQueue().presentKHR(presentInfoKHR);
 
         // Check again if presentation fails because the surface is now incompatible
-        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_app.isFramebufferResized.load()) {
+        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_app.IsFramebufferResized()) {
             UpdateOnFramebufferResized();
             return;
         }
@@ -500,7 +500,6 @@ namespace Felina
 
     void Renderer::UpdateOnFramebufferResized()
     {
-        m_app.isFramebufferResized.store(false);
         m_swapchain->Recreate();
 
         for (size_t i = 0; i < m_gBuffers.size(); i++)

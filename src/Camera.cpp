@@ -88,11 +88,6 @@ namespace Felina
 		}
 		m_localRight = glm::normalize(glm::cross(m_localForward, WORLD_UP));
 		m_localUp = glm::normalize(glm::cross(m_localRight, m_localForward));
-		
-		LOG(std::to_string(m_localForward.x) + ' '
-			+ std::to_string(m_localForward.y) + ' '
-			+ std::to_string(m_localForward.z)
-		);
 	}
 
 	void Camera::ComputeViewMatrix()
@@ -104,7 +99,7 @@ namespace Felina
 	void Camera::ComputeProjectionMatrix()
 	{
 		m_projectionMatrix = glm::perspective(glm::radians(45.0f), m_right / m_bottom, m_near, m_far);
-		m_projectionMatrix[1][1] *= -1; // Flips Y-axis..
+		m_projectionMatrix[1][1] *= -1; // Flips Y-axis
 		ComputeInvViewProj();
 	}
 

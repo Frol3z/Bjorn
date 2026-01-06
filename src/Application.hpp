@@ -3,6 +3,9 @@
 #include <memory>
 #include <string>
 #include <atomic>
+#include <utility>
+
+struct GLFWwindow;
 
 namespace Felina 
 {
@@ -11,43 +14,45 @@ namespace Felina
 	class Renderer;
 	class Object;
 	class UI;
+	class Input;
 
 	class Application
 	{
-		// TODO: move input-related functions to a dedicated class
-
-		public:	
-			std::atomic<bool> isFramebufferResized = false;
-		
+		public:			
 			Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight);
 			~Application();
 
 			void Init();
 			void Run();
 			void CleanUp();
+
 			const std::string& GetName() const { return m_name; }
+			inline Window& GetWindow() { return *m_window; }
+			inline Input& GetInput() { return *m_input; }
+			inline Scene& GetScene() { return *m_scene; }
+			
+			// NOTES: 
+			// It "consumes" the value when called (see Renderer.cpp).
+			inline bool IsFramebufferResized() { return std::exchange(m_isFramebufferResized, false); }
+			inline void SignalFramebufferResized() { m_isFramebufferResized = true; }
 
 		private:
+			static void FramebufferResizeCallback(GLFWwindow* window, int width, int height);
+			static void ScrollCallback(GLFWwindow* window, double xOffset, double yOffset);
+
 			void InitGlfw();
 			void InitImGui();
 			void InitScene();
 
-			void ProcessInput();
-
 			std::string m_name;
+			bool m_isFramebufferResized;
 			uint32_t m_startupWindowWidth; // Won't be updated when window gets resized
 			uint32_t m_startupWindowHeight;
 			
 			std::unique_ptr<Window> m_window = nullptr;
+			std::unique_ptr<Input> m_input = nullptr;
 			std::unique_ptr<UI> m_UI = nullptr;
 			std::unique_ptr<Scene> m_scene = nullptr;
 			std::unique_ptr<Renderer> m_renderer = nullptr;
-
-			// Normalized [0,1] mouse input
-			double m_mouseX{ 0.0 };
-			double m_mouseY{ 0.0 };
-			float m_sensitivity{ 100.0f };
-			double m_mouseDeltaX{ 0.0 };
-			double m_mouseDeltaY{ 0.0 };
 	};
 }

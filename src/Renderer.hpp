@@ -131,7 +131,9 @@ namespace Felina
 				vk::PipelineStageFlags2 dstStageMask
 			);
 
-			Application& m_app; // Need to be able to modify the framebufferResized boolean
+			// NOTE: non-const reference because
+			// Application::IsFramebufferResized cannot be const
+			Application& m_app;
 			const Window& m_window;
 			const Scene& m_scene;
 
