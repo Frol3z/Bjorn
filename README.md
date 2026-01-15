@@ -38,6 +38,7 @@ Currently I'm working on adding texture supports on my materials.
 - [Vulkan Memory Allocator 3.3.0](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
 - [Dear ImGui 1.92.4 (docking)](https://github.com/ocornut/imgui)
 - [tinygltf 2.9.7](https://github.com/syoyo/tinygltf)
+- [tinyfd 3.21.2](https://sourceforge.net/projects/tinyfiledialogs)
 ## Build instructions
 ### Windows
 1. Clone this repository:

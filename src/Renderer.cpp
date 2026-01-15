@@ -98,7 +98,7 @@ namespace Felina
             throw std::runtime_error("Failed to acquire swapchain image!");
         }
 
-        UpdateFrameData();
+        SetupFrameData();
 
         // Record command buffer and reset draw fence
         m_device->GetDevice().resetFences(*m_inFlightFences[m_currentFrame]);
@@ -436,7 +436,7 @@ namespace Felina
         }
     }
 
-    void Renderer::UpdateFrameData()
+    void Renderer::SetupFrameData()
     {   
         // Update camera data
         CameraData cameraData{};
@@ -524,6 +524,7 @@ namespace Felina
         auto layerProperties = m_context.enumerateInstanceLayerProperties();
         auto extensionProperties = m_context.enumerateInstanceExtensionProperties();
        
+        /*
         #ifdef _DEBUG
             std::cout << "Available instance layer:" << std::endl;
             for (const auto& layer : layerProperties) 
@@ -532,6 +533,7 @@ namespace Felina
             for (const auto& extension : extensionProperties)
                 std::cout << '\t' << extension.extensionName << std::endl;
         #endif
+        */
 
         // Get the required instance LAYERS
         std::vector<char const*> requiredLayers;

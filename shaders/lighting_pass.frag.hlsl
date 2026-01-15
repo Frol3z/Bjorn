@@ -50,16 +50,16 @@ Texture2D textures[MAX_TEXTURES];
 [[vk::binding(2, 2)]]
 TextureCube skybox;
 
-// Hardcoded directional light
+// Hardcoded DIRECTIONAL LIGHT
 static const float3 LIGHT_DIR = float3(1.0, 1.0, -1.0);
 static const float3 LIGHT_COL = float3(1.0, 1.0, 1.0);
 
 float3 reconstructWorldPosition(float depth, float2 uv)
 {
-    float2 ndc = uv * 2.0 - 1.0;
+    float2 ndc = uv * 2.0 - 1.0; // Convert [0, 1] to [-1, 1]
     float4 clipPos = float4(ndc.x, ndc.y, depth, 1.0);
-    float4 worldPosH = mul(cameraData.invViewProj, clipPos);
-    return (worldPosH.xyz / worldPosH.w);
+    float4 worldPosH = mul(cameraData.invViewProj, clipPos); // Clip to world-space
+    return (worldPosH.xyz / worldPosH.w); // De-homogenization
 }
 
 // Metalness-weighted Lambertian diffuse BRDF
@@ -119,6 +119,7 @@ float4 main(VertexOutput inVert) : SV_TARGET0
     float3 v = normalize(cameraData.position - fragWorldPosition);
     
     // If the fragment belongs to the background then the skybox will be sampled
+    // TODO: add a separate skybox pass
     if (depth >= 1.0)
     {
         return skybox.Sample(samplers[1], -v);
@@ -144,13 +145,9 @@ float4 main(VertexOutput inVert) : SV_TARGET0
     float3 f0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metalness);
     float3 fresnel = F(f0, hDotV);
     float3 specularBRDF = fresnel * D(alphaSquared, nDotH) * G(alphaSquared, nDotL, nDotV);
-    // TODO: add environment mapping
-    //float3 r = reflect(-v, n);
-    //float rDotN = max(dot(r, v), 0.0);
-    //float3 indirectLighting = F(f0, rDotN) * skybox.Sample(samplers[1], r).rgb; // Environment map
-    
     float3 combinedBRDF = (float3(1.0, 1.0, 1.0) - fresnel) * diffuseBRDF(baseColor, metalness) + specularBRDF;
     float3 directLighting = LIGHT_COL * combinedBRDF * nDotL;
+    // TODO: add environment mapping instead of ambient
     
     return float4(directLighting + (1.0 - metalness) * ambient * baseColor, 1.0);
 }

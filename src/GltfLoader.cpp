@@ -295,7 +295,7 @@ namespace Felina
 	{
 		// File parsing
 		tinygltf::Model model;
-		ParseFile(filepath, model);
+		ParseFile(filepath, model); // Bottleneck D:
 
 		// Load resources
 		// NOTE: texture MUST be loaded before materials!

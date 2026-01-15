@@ -142,6 +142,7 @@ namespace Felina
             // Add other requirements check here if needed
 
             // Print infos if needed
+            /*
             #ifdef _DEBUG
                 std::cout << '\t' << "- " << deviceProperties.deviceName << std::endl;
 
@@ -157,6 +158,7 @@ namespace Felina
                     deviceProperties.limits.maxStorageBufferRange <<
                     std::endl;
             #endif
+            */
 
             // Get required queue family
             auto queueFamilies = physicalDevice.getQueueFamilyProperties();

@@ -21,7 +21,8 @@ namespace Felina
 
 			// TODO: update
 			void AddObject(std::unique_ptr<Object> object);
-			const std::vector<std::unique_ptr<Object>>& GetObjects() const { return m_objects; }
+			inline const std::vector<std::unique_ptr<Object>>& GetObjects() const { return m_objects; }
+			inline void ClearObjects() { m_objects.clear(); }
 
 		private:
 			Camera m_camera;

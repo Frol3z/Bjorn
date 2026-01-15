@@ -1,9 +1,9 @@
 #pragma once
 
 #include <memory>
-#include <string>
-#include <atomic>
 #include <utility>
+
+#include "Common.hpp"
 
 struct GLFWwindow;
 
@@ -26,13 +26,14 @@ namespace Felina
 			void Run();
 			void CleanUp();
 
+			void LoadScene(const std::filesystem::path& filepath = DEFAULT_SCENE);
+
 			const std::string& GetName() const { return m_name; }
 			inline Window& GetWindow() { return *m_window; }
 			inline Input& GetInput() { return *m_input; }
 			inline Scene& GetScene() { return *m_scene; }
 			
-			// NOTES: 
-			// It "consumes" the value when called (see Renderer.cpp).
+			// NOTE: it "consumes" the value when called (see Renderer.cpp)
 			inline bool IsFramebufferResized() { return std::exchange(m_isFramebufferResized, false); }
 			inline void SignalFramebufferResized() { m_isFramebufferResized = true; }
 
@@ -42,19 +43,18 @@ namespace Felina
 
 			void InitGlfw();
 			void InitImGui();
-			void InitScene();
+			void Update();
 
-			void UpdateCamera();
+			bool m_isFramebufferResized{ false };
 
-			std::string m_name;
-			bool m_isFramebufferResized;
-			uint32_t m_startupWindowWidth; // Won't be updated when window gets resized
-			uint32_t m_startupWindowHeight;
-			
 			std::unique_ptr<Window> m_window = nullptr;
 			std::unique_ptr<Input> m_input = nullptr;
 			std::unique_ptr<UI> m_UI = nullptr;
 			std::unique_ptr<Scene> m_scene = nullptr;
-			std::unique_ptr<Renderer> m_renderer = nullptr;
+			std::unique_ptr<Renderer> m_renderer = nullptr;			
+			
+			const std::string m_name;
+			const uint32_t m_startupWindowWidth;
+			const uint32_t m_startupWindowHeight;
 	};
 }

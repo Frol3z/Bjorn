@@ -99,7 +99,7 @@ namespace Felina
 			void DrawImGuiFrame(ImDrawData* drawData);
 
 		private:
-			void UpdateFrameData();
+			void SetupFrameData();
 			void UpdateOnFramebufferResized();
 
 			void CreateInstance();
@@ -119,7 +119,7 @@ namespace Felina
 			void CreateSyncObjects();
 
 			void DrawObject(const Object& obj, uint32_t& idx);
-			void RecordCommandBuffer(uint32_t imageIndex);
+			void RecordCommandBuffer(uint32_t imageIndex); // 2 passes
 			void TransitionImageLayout(
 				vk::Image image,
 				vk::Format imageFormat,

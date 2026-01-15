@@ -92,14 +92,17 @@ namespace Felina
 
 	void Camera::ComputeViewMatrix()
 	{
+		// Convert to our world CS in OpenGL CS
+		// NOTE: extrinsic parameters (world space -> view space)
 		m_viewMatrix = glm::lookAt(m_position, m_target, m_localUp);
 		ComputeInvViewProj();
 	}
 
 	void Camera::ComputeProjectionMatrix()
 	{
+		// NOTE: intrinsic parameters (view space -> clip space)
 		m_projectionMatrix = glm::perspective(glm::radians(45.0f), m_right / m_bottom, m_near, m_far);
-		m_projectionMatrix[1][1] *= -1; // Flips Y-axis
+		m_projectionMatrix[1][1] *= -1; // Flips Y-axis (OpenGL CS -> Vulkan CS)
 		ComputeInvViewProj();
 	}
 

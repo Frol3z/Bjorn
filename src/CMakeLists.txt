@@ -51,11 +51,19 @@ target_include_directories(Felina PRIVATE
     ${IMGUI_SOURCE_DIR} 
     ${TINYGLTF_SOURCE_DIR}
     ${Vulkan_INCLUDE_DIR}
+    ../dependencies/tinyfd
 )
 
 # Libraries
+
+# tinyfd
+add_library(tinyfd STATIC
+    "../dependencies/tinyfd/tinyfiledialogs.cpp"
+)
+
 target_link_libraries(Felina PRIVATE
     Vulkan::Vulkan
     glfw
     glm::glm
+    tinyfd
 )

@@ -13,12 +13,11 @@ int main()
 	}
 	catch (const std::exception& e) 
 	{
-		std::cerr << "[Main] An exception has been raised: " << e.what() << "\n";
+		std::cerr << "[Main] An exception has been caught: " << e.what() << "\n";
 		app.CleanUp();
 		return EXIT_FAILURE;
 	}
 
 	app.CleanUp();
-	std::cout << "[Main] Fin." << std::endl;
 	return EXIT_SUCCESS;
 }

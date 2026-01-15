@@ -1,23 +1,30 @@
 #pragma once
 
 #include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include <filesystem>
 
 namespace Felina
 {
 	class Object;
 	class Scene;
+	class Application;
 
 	class UI
 	{
 		public:
 			UI();
-			void Update(Scene& scene);
+			void Update(Scene& scene, Application& app);
 
 		private:
-			void DrawHierarchy(Scene& scene);
+			void DrawSceneWindow(Scene& scene, Application& app);
 			void DrawHierarchyObject(Object* object, size_t& idx);
-			void DrawInspector();
+			void DrawInspectorWindow();
+			void DrawInfoTab();
+
+			std::filesystem::path OpenFileDialog (const std::filesystem::path& defaultPath, const std::vector<const char *>& filters) const;
+
+			// Temporary solution to center a button
+			bool ButtonCenteredOnLine(const char* label, float alignment = 0.5f);
 
 			Object* m_hierarchySelection = nullptr;
 			glm::vec3 m_displayedPosition;
