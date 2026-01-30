@@ -14,8 +14,7 @@ namespace Felina
         VmaAllocationCreateInfo allocCreateInfo{};
         allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-        CreateAlbedoAttachment(device, allocCreateInfo);
-        CreateSpecularAttachment(device, allocCreateInfo);
+        CreateBaseColorAttachment(device, allocCreateInfo);
         CreateMaterialInfoAttachment(device, allocCreateInfo);
         CreateNormalAttachment(device, allocCreateInfo);
         CreateDepthAttachment(device, allocCreateInfo);
@@ -66,15 +65,14 @@ namespace Felina
         VmaAllocationCreateInfo allocCreateInfo{};
         allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-        CreateAlbedoAttachment(device, allocCreateInfo);
-        CreateSpecularAttachment(device, allocCreateInfo);
+        CreateBaseColorAttachment(device, allocCreateInfo);
         CreateMaterialInfoAttachment(device, allocCreateInfo);
         CreateNormalAttachment(device, allocCreateInfo);
         CreateDepthAttachment(device, allocCreateInfo);
         CreateDescriptorSets(device, descriptorPool);
     }
 
-    void GBuffer::CreateAlbedoAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo)
+    void GBuffer::CreateBaseColorAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo)
     {
         vk::ImageCreateInfo imageCreateInfo = {
             .imageType = vk::ImageType::e2D,
@@ -90,29 +88,8 @@ namespace Felina
         };
 
         m_attachments.push_back({
-            AttachmentType::Albedo,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo)
-        });
-    }
-
-    void GBuffer::CreateSpecularAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo)
-    {
-        vk::ImageCreateInfo imageCreateInfo{
-            .imageType = vk::ImageType::e2D,
-            .format = vk::Format::eR8G8B8A8Unorm, // RGB specular + A shininess
-            .extent = vk::Extent3D{ m_extent.width, m_extent.height, 1 },
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = vk::SampleCountFlagBits::e1,
-            .tiling = vk::ImageTiling::eOptimal,
-            .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
-            .sharingMode = vk::SharingMode::eExclusive,
-            .initialLayout = vk::ImageLayout::eUndefined
-        };
-
-        m_attachments.push_back({ 
-            AttachmentType::Specular,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo) 
+            AttachmentType::BaseColor,
+            std::make_unique<Texture>(device, imageCreateInfo, allocCreateInfo)
         });
     }
 
@@ -120,7 +97,7 @@ namespace Felina
     {
         vk::ImageCreateInfo imageCreateInfo{
             .imageType = vk::ImageType::e2D,
-            .format = vk::Format::eR8G8B8A8Unorm, // Shininess must be rescaled in the shader
+            .format = vk::Format::eR8G8B8A8Unorm,
             .extent = vk::Extent3D{ m_extent.width, m_extent.height, 1 },
             .mipLevels = 1,
             .arrayLayers = 1,
@@ -133,7 +110,7 @@ namespace Felina
 
         m_attachments.push_back({
             AttachmentType::MaterialInfo,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo)
+            std::make_unique<Texture>(device, imageCreateInfo, allocCreateInfo)
         });
     }
 
@@ -154,7 +131,7 @@ namespace Felina
 
         m_attachments.push_back({
             AttachmentType::Normal,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo)
+            std::make_unique<Texture>(device, imageCreateInfo, allocCreateInfo)
         });
     }
 
@@ -175,7 +152,7 @@ namespace Felina
 
         m_attachments.push_back({
             AttachmentType::Depth,
-            std::make_unique<Image>(device, imageCreateInfo, allocCreateInfo)
+            std::make_unique<Texture>(device, imageCreateInfo, allocCreateInfo)
         });
     }
 

@@ -1,11 +1,13 @@
 #include "UI.hpp"
 
+#include "Application.hpp"
 #include "Scene.hpp"
 #include "Common.hpp"
 
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
+#include <tinyfiledialogs.h>
 
 namespace Felina
 {
@@ -13,7 +15,7 @@ namespace Felina
 		: m_displayedPosition(glm::vec3(0.0f)), m_displayedRotation(glm::vec3(0.0f)), m_displayedScale(glm::vec3(0.0f))
 	{}
 
-	void UI::Update(Scene& scene)
+	void UI::Update(Scene& scene, Application& app)
 	{
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -24,20 +26,42 @@ namespace Felina
 		//ImGui::ShowDemoWindow();
 
 		// Custom UI
-		DrawHierarchy(scene);
-		DrawInspector();
+		DrawSceneWindow(scene, app);
+		DrawInspectorWindow();
 
 		ImGui::Render();
 	}
 
-	void UI::DrawHierarchy(Scene& scene)
+	void UI::DrawSceneWindow(Scene& scene, Application& app)
 	{
-		ImGui::Begin("Hierarchy");
+		ImGui::Begin("Scene");
+
+		// Load new scene button
+		if (ButtonCenteredOnLine("Load New Scene...", 0.5f))
+		{
+			auto selectedFilePath = OpenFileDialog(ASSETS_DIR, { "*.glb", "*.gltf" });
+			if (!selectedFilePath.empty())
+			{
+				app.LoadScene(selectedFilePath);
+				m_hierarchySelection = nullptr; // This pointer may point to an old object
+			}
+		}
+
+		// Draw scene hierarchy
+		ImGui::SeparatorText("Hierarchy");
 		size_t idx = 0; // Same reference trick used in Renderer.cpp
 		for (const auto& obj : scene.GetObjects())
 		{
 			DrawHierarchyObject(obj.get(), idx);
 		}
+
+		// Log camera info
+		ImGui::SeparatorText("Camera");
+		glm::vec3 pos = scene.GetCamera().GetPosition();
+		glm::vec3 target = scene.GetCamera().GetTarget();
+		ImGui::TextDisabled("Camera: (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
+		ImGui::TextDisabled("Target: (%.2f, %.2f, %.2f)", target.x, target.y, target.z);		
+		
 		ImGui::End();
 	}
 
@@ -77,7 +101,7 @@ namespace Felina
 		}
 	}
 
-	void UI::DrawInspector()
+	void UI::DrawInspectorWindow()
 	{
 		ImGui::Begin("Inspector");
 		if (m_hierarchySelection)
@@ -105,52 +129,89 @@ namespace Felina
 			// Mesh
 			auto& rm = ResourceManager::GetInstance();
 			MeshID selectedMesh = m_hierarchySelection->GetMesh();
-			if (ImGui::BeginCombo("Mesh", rm.GetMeshName(selectedMesh).c_str(), 0))
+			if (selectedMesh != MeshID(-1))
 			{
-				static ImGuiTextFilter filter;
-				if (ImGui::IsWindowAppearing())
+				if (ImGui::BeginCombo("Mesh", rm.GetMeshName(selectedMesh).c_str(), 0))
 				{
-					ImGui::SetKeyboardFocusHere();
-					filter.Clear();
-				}
-				ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
-				filter.Draw("##Filter", -FLT_MIN);
+					static ImGuiTextFilter filter;
+					if (ImGui::IsWindowAppearing())
+					{
+						ImGui::SetKeyboardFocusHere();
+						filter.Clear();
+					}
+					ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
+					filter.Draw("##Filter", -FLT_MIN);
 
-				for (auto& [id, mesh] : rm.GetMeshes())
-				{
-					auto& name = rm.GetMeshName(id);
-					const bool isSelected = (id == selectedMesh);
-					if (filter.PassFilter(name.c_str()))
-						if (ImGui::Selectable(name.c_str(), isSelected))
-							m_hierarchySelection->SetMesh(id);
+					for (auto& [id, mesh] : rm.GetMeshes())
+					{
+						auto& name = rm.GetMeshName(id);
+						const bool isSelected = (id == selectedMesh);
+						if (filter.PassFilter(name.c_str()))
+							if (ImGui::Selectable(name.c_str(), isSelected))
+								m_hierarchySelection->SetMesh(id);
+					}
+					ImGui::EndCombo();
 				}
-				ImGui::EndCombo();
-			}
 
-			// Material
-			MaterialID selectedMaterial = m_hierarchySelection->GetMaterial();
-			if (ImGui::BeginCombo("Material", rm.GetMaterialName(selectedMaterial).c_str(), 0))
-			{
-				static ImGuiTextFilter filter;
-				if (ImGui::IsWindowAppearing())
+				// Material
+				MaterialID selectedMaterial = m_hierarchySelection->GetMaterial();
+				if (ImGui::BeginCombo("Material", rm.GetMaterialName(selectedMaterial).c_str(), 0))
 				{
-					ImGui::SetKeyboardFocusHere();
-					filter.Clear();
-				}
-				ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
-				filter.Draw("##Filter", -FLT_MIN);
+					static ImGuiTextFilter filter;
+					if (ImGui::IsWindowAppearing())
+					{
+						ImGui::SetKeyboardFocusHere();
+						filter.Clear();
+					}
+					ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
+					filter.Draw("##Filter", -FLT_MIN);
 
-				for (auto& [id, material] : rm.GetMaterials())
-				{
-					auto& name = rm.GetMaterialName(id);
-					const bool isSelected = (id == selectedMaterial);
-					if (filter.PassFilter(name.c_str()))
-						if (ImGui::Selectable(name.c_str(), isSelected))
-							m_hierarchySelection->SetMaterial(id);
+					for (auto& [id, material] : rm.GetMaterials())
+					{
+						auto& name = rm.GetMaterialName(id);
+						const bool isSelected = (id == selectedMaterial);
+						if (filter.PassFilter(name.c_str()))
+							if (ImGui::Selectable(name.c_str(), isSelected))
+								m_hierarchySelection->SetMaterial(id);
+					}
+					ImGui::EndCombo();
 				}
-				ImGui::EndCombo();
 			}
 		}
 		ImGui::End();
+	}
+
+	std::filesystem::path UI::OpenFileDialog(const std::filesystem::path& defaultPath, const std::vector<const char *>& filters) const
+	{
+		const char* selectedPath = tinyfd_openFileDialog(
+			"",														// title
+			std::filesystem::absolute(ASSETS_DIR).string().c_str(),	// default path or file (std::absolute makes subfolder paths work)
+			filters.size(),											// filters count
+			filters.data(),											// filters data
+			"",														// description
+			0														// allow multiple selections
+		);
+
+		// Check if the dialog has been closed without selecting anything
+		if (selectedPath == nullptr)
+			return {};
+		return selectedPath;
+	}
+
+	// alignment: 0.0f -> align left
+	// alignment: 0.5f -> align center
+	// alignment: 1.0f -> align right
+	bool UI::ButtonCenteredOnLine(const char* label, float alignment)
+	{
+		ImGuiStyle& style = ImGui::GetStyle();
+
+		float size = ImGui::CalcTextSize(label).x + style.FramePadding.x * 2.0f;
+		float avail = ImGui::GetContentRegionAvail().x;
+
+		float off = (avail - size) * alignment;
+		if (off > 0.0f)
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + off);
+
+		return ImGui::Button(label);
 	}
 }

@@ -9,12 +9,8 @@ namespace Felina
 {
 	class Object
 	{
-		// TODO:
-		// Figure out a method to cache the matrices without the need to recompute
-		// them each frame, especially the normal matrix which requires an inverse computation
-
 		public:
-			Object(const std::string& name, MeshID mesh, MaterialID material, Object* parent = nullptr)
+			Object(const std::string& name, MeshID mesh = -1, MaterialID material = -1, Object* parent = nullptr)
 				: m_name(name), m_mesh(mesh), m_material(material), m_parent(parent)
 			{}
 			
@@ -30,8 +26,7 @@ namespace Felina
 			const std::string& GetName() const { return m_name; }
 			MeshID GetMesh() const { return m_mesh; }
 			MaterialID GetMaterial() const { return m_material; }
-			glm::mat4 GetModelMatrix() const;
-			glm::mat3 GetNormalMatrix() const { return glm::transpose(glm::inverse(glm::mat3(GetModelMatrix()))); }
+			glm::mat4 GetModelMatrix() const { return m_transform.GetMatrix(); }
 
 			// Transform
 			void Translate(const glm::vec3& translation) { m_transform.Translate(translation);}
@@ -50,6 +45,7 @@ namespace Felina
 
 			MeshID m_mesh;
 			MaterialID m_material;
+			
 			Transform m_transform;
 
 			Object* m_parent;

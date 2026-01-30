@@ -1,8 +1,8 @@
 #include "Camera.hpp"
 
-#include <glm/gtc/matrix_transform.hpp>
+#include "Common.hpp"
 
-#include <iostream>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace Felina
 {
@@ -23,6 +23,24 @@ namespace Felina
 		m_position = totalRotation * glm::vec4(m_position, 1.0f);
 
 		ComputeLocalCoordinateSystem();
+		ComputeViewMatrix();
+	}
+
+	void Camera::Pan(double deltaX, double deltaY)
+	{
+		glm::vec3 offset = static_cast<float>(deltaX) * m_localRight
+			+ static_cast<float>(-deltaY) * m_localUp; // Sign flipped!
+		m_position += offset;
+		m_target += offset;
+		ComputeLocalCoordinateSystem();
+		ComputeViewMatrix();
+	}
+
+	void Camera::Dolly(double amount)
+	{
+		glm::vec3 offset = static_cast<float>(amount) * m_localForward;
+		m_position += offset;
+		m_target += offset;
 		ComputeViewMatrix();
 	}
 
@@ -74,14 +92,17 @@ namespace Felina
 
 	void Camera::ComputeViewMatrix()
 	{
-		m_viewMatrix = glm::lookAt(m_position, glm::vec3(0.0f), m_localUp);
+		// Convert to our world CS in OpenGL CS
+		// NOTE: extrinsic parameters (world space -> view space)
+		m_viewMatrix = glm::lookAt(m_position, m_target, m_localUp);
 		ComputeInvViewProj();
 	}
 
 	void Camera::ComputeProjectionMatrix()
 	{
+		// NOTE: intrinsic parameters (view space -> clip space)
 		m_projectionMatrix = glm::perspective(glm::radians(45.0f), m_right / m_bottom, m_near, m_far);
-		m_projectionMatrix[1][1] *= -1; // Flips Y-axis..
+		m_projectionMatrix[1][1] *= -1; // Flips Y-axis (OpenGL CS -> Vulkan CS)
 		ComputeInvViewProj();
 	}
 

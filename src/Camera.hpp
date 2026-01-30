@@ -17,9 +17,14 @@ namespace Felina
 			Camera(float width, float height, float nearPlane = 0.1f, float farPlane = 1000.0f);
 		
 			void Rotate(double azimuth, double elevation);
+			void Pan(double deltaX, double deltaY);
+			void Dolly(double amount);
 			void UpdateProjectionMatrix(float newWidth, float newHeight);
 			void SetPosition(glm::vec3 position);
-			glm::vec3 GetPosition() const { return m_position; }
+
+			inline glm::vec3 GetPosition() const { return m_position; }
+			inline glm::vec3 GetTarget() const { return m_target; }
+
 			glm::mat4 GetProjectionMatrix() const;
 			glm::mat4 GetViewMatrix() const;
 			glm::mat4 GetInvViewProj() const;

@@ -7,7 +7,7 @@
 #include "Device.hpp"
 #include "Swapchain.hpp"
 #include "Buffer.hpp"
-#include "Image.hpp"
+#include "Texture.hpp"
 #include "GBuffer.hpp"
 #include "Common.hpp"
 #include "PipelineBuilder.hpp"
@@ -16,9 +16,11 @@
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <backends/imgui_impl_vulkan.h>
+#include <stb_image.h>
 
 #include <iostream>
 #include <filesystem>
+#include <cassert>
 
 namespace Felina 
 {
@@ -50,8 +52,9 @@ namespace Felina
         CreatePipeline();
         CreateCommandPool();
         CreateCommandBuffer();
+        CreateSamplers();
         CreateUniformBuffers();
-        CreateDescriptorSets();
+        AllocateDescriptorSets();
         CreateSyncObjects();
     }
 
@@ -75,17 +78,19 @@ namespace Felina
         m_device->GetPresentQueue().waitIdle();
 
         // Check if window has been resized/minimize before trying to acquire next image
-        if (m_app.isFramebufferResized.load()) {
+        if (m_app.IsFramebufferResized()) {
             UpdateOnFramebufferResized();
             return;
         }
 
         // Acquire next image index and signal the semaphore when done
-        auto [result, imageIndex] = m_swapchain->AcquireNextImage(*m_imageAvailableSemaphores[m_currentFrame]);
+        auto resultStruct = m_swapchain->AcquireNextImage(*m_imageAvailableSemaphores[m_currentFrame]);
+        auto result = resultStruct.result; // vulkan.hpp changed their return value from std::pair
+        auto imageIndex = resultStruct.value; // to a custom struct
 
         // Check if the surface is still compatible with the swapchain or if it was resized/minimized
         // !!! Checking m_IsFramebufferResized guarantees prevents presentation to an invalid surface
-        if (result == vk::Result::eErrorOutOfDateKHR || m_app.isFramebufferResized.load()) {
+        if (result == vk::Result::eErrorOutOfDateKHR || m_app.IsFramebufferResized()) {
             UpdateOnFramebufferResized();
             return;
         }
@@ -93,7 +98,7 @@ namespace Felina
             throw std::runtime_error("Failed to acquire swapchain image!");
         }
 
-        UpdateFrameData();
+        SetupFrameData();
 
         // Record command buffer and reset draw fence
         m_device->GetDevice().resetFences(*m_inFlightFences[m_currentFrame]);
@@ -123,7 +128,7 @@ namespace Felina
         result = m_device->GetPresentQueue().presentKHR(presentInfoKHR);
 
         // Check again if presentation fails because the surface is now incompatible
-        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_app.isFramebufferResized.load()) {
+        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_app.IsFramebufferResized()) {
             UpdateOnFramebufferResized();
             return;
         }
@@ -142,6 +147,235 @@ namespace Felina
     void Renderer::LoadMesh(Mesh& mesh)
     {
         mesh.Load(*m_device);
+    }
+
+    void Renderer::LoadTexture(const Texture& texture, const void* rawImageData, size_t rawImageSize)
+    {
+        // When updating image data we recommend the use of staging buffers,
+        // rather than staging images for our hardware
+        // From here: https://developer.nvidia.com/vulkan-memory-management
+
+        // Create and fill staging buffer
+        vk::DeviceSize size = static_cast<vk::DeviceSize>(rawImageSize);
+        vk::BufferCreateInfo stagingBufferCreateInfo
+        {
+            .size = size,
+            .usage = vk::BufferUsageFlagBits::eTransferSrc,
+            .sharingMode = vk::SharingMode::eExclusive,
+        };
+        // See https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
+        // Staging copy for upload section
+        VmaAllocationCreateInfo allocCreateInfo{ 
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+                   | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+        };
+        Buffer stagingBuffer{ m_device->GetAllocator(), stagingBufferCreateInfo, allocCreateInfo };
+        
+        stagingBuffer.LoadData(rawImageData, rawImageSize);
+        m_device->CopyBufferToImage(stagingBuffer, texture, size);
+    }
+
+    void Renderer::LoadSkybox(const std::filesystem::path& folderPath)
+    {
+        constexpr int requiredComponents = 4;
+        constexpr int faceCount = 6;
+
+        std::array<unsigned char*, faceCount> faces { };
+        int width{ 0 };
+        int height{ 0 };
+
+        // Load the faces images
+        size_t i { 0 };
+        for (auto const& dirEntry : std::filesystem::directory_iterator{ folderPath })
+        {
+            const std::string& path = dirEntry.path().string();
+            LOG("[Renderer] Loading " + path + "...");
+
+            int w, h, c;
+            faces[i] = stbi_load(path.c_str(), &w, &h, &c, requiredComponents);
+            if (!faces[i])
+                throw std::runtime_error("[Renderer] Failed to load skybox face #" + std::to_string(i));
+
+            if(i == 0)
+            {
+                width = w;
+                height = h;
+            }
+            else
+            {
+                assert(width == w && height == h);
+            }
+            i++;
+        }
+        assert(i == 6);
+
+        // Pack the data into a single buffer
+        size_t faceSize = width * height * requiredComponents;
+        size_t cubeMapSize = faceSize * faceCount;
+        std::vector<unsigned char> cubeMapData(cubeMapSize);
+        for (size_t face = 0; face < 6; face++)
+        {
+            memcpy(
+                cubeMapData.data() + face * faceSize, // Dst
+                faces[face],                          // Src
+                faceSize                              // Size
+            );
+        }
+
+        // Create texture
+        vk::ImageCreateInfo imageInfo{
+            .flags          = vk::ImageCreateFlagBits::eCubeCompatible, // !
+            .imageType      = vk::ImageType::e2D,
+            .format         = vk::Format::eR8G8B8A8Srgb,
+            .extent         = vk::Extent3D{ static_cast<uint32_t>(width),static_cast<uint32_t>(height), 1 },
+            .mipLevels      = 1,
+            .arrayLayers    = 6, // !
+            .samples        = vk::SampleCountFlagBits::e1,
+            .tiling         = vk::ImageTiling::eOptimal,
+            .usage          = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+            .sharingMode    = vk::SharingMode::eExclusive,
+            .initialLayout  = vk::ImageLayout::eUndefined
+        };
+        VmaAllocationCreateInfo allocInfo = { .usage = VMA_MEMORY_USAGE_AUTO };
+        std::unique_ptr<Texture> texture = std::make_unique<Texture>(*m_device, imageInfo, allocInfo);
+
+        // Load texture
+        // TODO: Renderer calling RM calling Renderer again, I should fix this weird process
+        ResourceManager::GetInstance().LoadTexture(std::move(texture), "Skybox", cubeMapData.data(), cubeMapSize, *this);
+        // TODO: free stb_image_data
+    }
+
+    void Renderer::UpdateDescriptorSets()
+    {
+        // Bind the textures and samplers to their descriptor set (shared between frames)
+       {
+           // Samplers
+           std::array<vk::DescriptorImageInfo, MAX_SAMPLERS> samplerInfos;
+           for (size_t i = 0; i < samplerInfos.size(); i++)
+           {
+               samplerInfos[i] = {
+                .sampler = m_samplers[i].value(),
+                .imageView = nullptr,
+                .imageLayout = vk::ImageLayout::eUndefined
+               };
+           }
+
+           // Textures (array + skybox cubemap)
+           auto& rm = ResourceManager::GetInstance();
+           const auto& textures = rm.GetTextures();
+           std::array<vk::DescriptorImageInfo, MAX_TEXTURES> imageInfos;
+           vk::DescriptorImageInfo skyboxInfo; // Skybox doesn't count in MAX_TEXTURES
+
+           assert(textures.size() < (MAX_TEXTURES + 1) && "[Renderer] Loaded textures surpass MAX_TEXTURES!");
+           size_t i = 0;
+           for (const auto& [id, resource] : textures)
+           {
+               // Check wether it is the skybox
+               if (resource.resource->IsCubemap())
+               {
+                   skyboxInfo = {
+                       .sampler = nullptr,
+                       .imageView = resource.resource->GetImageView(),
+                       .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+                   };
+               }
+               else
+               {
+                   imageInfos[i] = {
+                       .sampler = nullptr,
+                       .imageView = resource.resource->GetImageView(),
+                       .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+                   };
+                   ++i;
+               }
+           }
+
+           // Descriptor writes
+           std::array<vk::WriteDescriptorSet, 3> writes;
+           writes[0] = {
+             .dstSet = m_textureDescriptorSets,
+             .dstBinding = 0, // samplers
+             .dstArrayElement = 0,
+             .descriptorCount = static_cast<uint32_t>(samplerInfos.size()),
+             .descriptorType = vk::DescriptorType::eSampler,
+             .pImageInfo = samplerInfos.data()
+           };
+           writes[1] = {
+                .dstSet = m_textureDescriptorSets,
+                .dstBinding = 1, // texture
+                .dstArrayElement = 0,
+                .descriptorCount = static_cast<uint32_t>(imageInfos.size()),
+                .descriptorType = vk::DescriptorType::eSampledImage,
+                .pImageInfo = imageInfos.data()
+           };
+           writes[2] = {
+             .dstSet = m_textureDescriptorSets,
+             .dstBinding = 2, // skybox
+             .dstArrayElement = 0,
+             .descriptorCount = 1,
+             .descriptorType = vk::DescriptorType::eSampledImage,
+             .pImageInfo = &skyboxInfo
+           };
+           m_device->GetDevice().updateDescriptorSets(writes, {});
+       }
+
+       // Bind the buffers to the corresponding set (per frame in flight)
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            // Camera descriptor set
+            vk::DescriptorBufferInfo cameraUBOInfo{
+                .buffer = m_cameraUBOs[i]->GetHandle(),
+                .offset = 0,
+                .range = sizeof(CameraData)
+            };
+            vk::WriteDescriptorSet cameraWrite{
+                .dstSet = m_cameraDescriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eUniformBuffer,
+                .pBufferInfo = &cameraUBOInfo
+            };
+            m_device->GetDevice().updateDescriptorSets(cameraWrite, {});
+
+            // Object descriptor set
+            vk::DescriptorBufferInfo objectSSBOInfo{
+                .buffer = m_objectSSBOs[i]->GetHandle(),
+                .offset = 0,
+                .range = sizeof(ObjectData) * MAX_OBJECTS
+            };
+            vk::WriteDescriptorSet objectWrite{
+                .dstSet = m_objectDescriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo = &objectSSBOInfo
+            };
+            m_device->GetDevice().updateDescriptorSets(objectWrite, {});
+
+            // Material descriptor set
+            vk::DescriptorBufferInfo materialSSBOInfo{
+                .buffer = m_materialSSBOs[i]->GetHandle(),
+                .offset = 0,
+                .range = sizeof(MaterialData) * MAX_MATERIALS
+            };
+            vk::WriteDescriptorSet materialWrite{
+                .dstSet = m_materialDescriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo = &materialSSBOInfo
+            };
+            m_device->GetDevice().updateDescriptorSets(materialWrite, {});
+        }
+    }
+
+    const Device& Renderer::GetDevice() const
+    {
+        return *m_device;
     }
 
     ImGui_ImplVulkan_InitInfo Renderer::GetImGuiInitInfo()
@@ -186,23 +420,28 @@ namespace Felina
         ImGui_ImplVulkan_RenderDrawData(drawData, *m_commandBuffers[m_currentFrame]);
     }
 
-    static void UpdateObject(const Object& obj, std::vector<Renderer::ObjectData>& objectDatas)
+    static void UpdateObject(const Object& obj, glm::mat4 parentModelMatrix, std::vector<Renderer::ObjectData>& objectDatas)
     {
         // Add current object data
-        objectDatas.emplace_back(Renderer::ObjectData{
-            .model = obj.GetModelMatrix(),
-            .normal = obj.GetNormalMatrix()
-        });
+        glm::mat4 modelMatrix = parentModelMatrix * obj.GetModelMatrix();
+        if (obj.GetMesh() != MeshID(-1))
+        {
+            objectDatas.emplace_back(Renderer::ObjectData{
+                .model = modelMatrix,
+                .normal = glm::transpose(glm::inverse(glm::mat3(modelMatrix)))
+                // .normal = glm::mat3(modelMatrix) (uniform scaling ONLY assumption)
+            });
+        }
 
         // Iterate through its children
         for (const auto& childPtr : obj.GetChildren())
         {
             const Object& child = *childPtr;
-            UpdateObject(child, objectDatas);
+            UpdateObject(child, modelMatrix, objectDatas);
         }
     }
 
-    void Renderer::UpdateFrameData()
+    void Renderer::SetupFrameData()
     {   
         // Update camera data
         CameraData cameraData{};
@@ -218,14 +457,26 @@ namespace Felina
         for (const auto& objPtr : objects)
         {
             const Object& obj = *objPtr;
-            UpdateObject(obj, objectDatas);
+            UpdateObject(obj, glm::mat4(1.0f), objectDatas);
         }
         m_objectSSBOs[m_currentFrame]->LoadData(objectDatas.data(), objectDatas.size() * sizeof(ObjectData));
+        
+        // TODO: optimize by avoid doing these iterations each frame if not needed
+        // Iterate through texture to fill up the look-up table
+        auto& rm = ResourceManager::GetInstance();
+        auto& texturesMapping = m_textureIDToArrayID[m_currentFrame];
+        uint32_t index = 0;
+        for (const auto& [id, res] : rm.GetTextures())
+        {
+            if (res.resource->IsCubemap())
+                continue;
+            texturesMapping[id] = index++;
+        }
 
         // Fill the material data storage buffer
         std::vector<MaterialData> materialDatas;
-        auto& mapping = m_materialIDToSSBOID[m_currentFrame];
-        uint32_t index = 0;
+        auto& materialsMapping = m_materialIDToSSBOID[m_currentFrame];
+        index = 0;
         for (const auto& [id, res] : ResourceManager::GetInstance().GetMaterials())
         {
             // Get raw pointer to the material
@@ -233,20 +484,27 @@ namespace Felina
 
             // Fill the MaterialData struct
             MaterialData matData{};
-            matData.albedo = mat->GetAlbedo();
-            matData.specular = mat->GetSpecular();
-            matData.materialInfo = mat->GetCoefficients();
+            matData.baseColor = mat->GetBaseColor();
+            matData.materialInfo = mat->GetMetallicRoughness();
+
+            // If the texture is defined use the mapping to get the
+            // correct texture index, else -1
+            TextureID texId = mat->GetBaseColorTexture();
+            matData.baseColorTex = (texId != -1) ? texturesMapping[texId] : texId;
+
+            texId = mat->GetMetallicRoughnessTexture();
+            matData.materialInfoTex = (texId != -1) ? texturesMapping[texId] : texId;
+            
             materialDatas.push_back(matData);
 
             // Keep track of the storage buffer IDs
-            mapping[id] = index++;
+            materialsMapping[id] = index++;
         }
         m_materialSSBOs[m_currentFrame]->LoadData(materialDatas.data(), materialDatas.size() * sizeof(MaterialData));
     }
 
     void Renderer::UpdateOnFramebufferResized()
     {
-        m_app.isFramebufferResized.store(false);
         m_swapchain->Recreate();
 
         for (size_t i = 0; i < m_gBuffers.size(); i++)
@@ -271,6 +529,7 @@ namespace Felina
         auto layerProperties = m_context.enumerateInstanceLayerProperties();
         auto extensionProperties = m_context.enumerateInstanceExtensionProperties();
        
+        /*
         #ifdef _DEBUG
             std::cout << "Available instance layer:" << std::endl;
             for (const auto& layer : layerProperties) 
@@ -279,6 +538,7 @@ namespace Felina
             for (const auto& extension : extensionProperties)
                 std::cout << '\t' << extension.extensionName << std::endl;
         #endif
+        */
 
         // Get the required instance LAYERS
         std::vector<char const*> requiredLayers;
@@ -410,6 +670,40 @@ namespace Felina
             .pBindings = &materialBinding
         };
         m_materialSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), materialLayout);
+
+        // Textures and sampler set layouts
+        // Binding 0 -> Samplers array
+        // Binding 1 -> Textures array
+        // Binding 2 -> Skybox
+        constexpr uint32_t bindingCount = 3;
+        std::array<vk::DescriptorSetLayoutBinding, bindingCount> bindings;
+        bindings[0] = {
+            .binding = 0,
+            .descriptorType = vk::DescriptorType::eSampler,
+            .descriptorCount = MAX_SAMPLERS,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+            .pImmutableSamplers = nullptr
+        };
+        bindings[1] = {
+            .binding = 1,
+            .descriptorType = vk::DescriptorType::eSampledImage,
+            .descriptorCount = MAX_TEXTURES,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+            .pImmutableSamplers = nullptr
+        };
+        bindings[2] = {
+            .binding = 2,
+            .descriptorType = vk::DescriptorType::eSampledImage,
+            .descriptorCount = 1,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+            .pImmutableSamplers = nullptr
+        };
+        vk::DescriptorSetLayoutCreateInfo textureLayout
+        {
+            .bindingCount = bindingCount,
+            .pBindings = bindings.data()
+        };
+        m_textureSetLayout = vk::raii::DescriptorSetLayout(m_device->GetDevice(), textureLayout);
     }
 
     void Renderer::CreatePushConstant()
@@ -435,7 +729,7 @@ namespace Felina
         pipelineBuilder.SetShaderStages(geomShaderStages);
         pipelineBuilder.SetColorBlending(static_cast<uint32_t>(gBuffer->GetAttachmentsCount() - 1)); // Depth attachment doesn't need blending!
 
-        std::vector<vk::DescriptorSetLayout> layouts{ m_cameraSetLayout, m_objectSetLayout, m_materialSetLayout };
+        std::vector<vk::DescriptorSetLayout> layouts{ m_cameraSetLayout, m_objectSetLayout, m_materialSetLayout, m_textureSetLayout };
         std::vector<vk::PushConstantRange> ranges{ m_objectPushConst };
         pipelineBuilder.SetPipelineLayout(layouts, ranges);
         pipelineBuilder.SetAttachmentsFormat(gBuffer->GetColorAttachmentFormats(), gBuffer->GetDepthFormat());
@@ -456,7 +750,7 @@ namespace Felina
         pipelineBuilder.DisableBackfaceCulling(); // To avoid culling the fullscreen triangle
         pipelineBuilder.SetColorBlending(1); // 1 attachment -> swapchain image
         pipelineBuilder.SetPipelineLayout(
-            std::vector<vk::DescriptorSetLayout>{ m_cameraSetLayout, gBuffer->GetDescriptorSetLayout() },
+            std::vector<vk::DescriptorSetLayout>{ m_cameraSetLayout, gBuffer->GetDescriptorSetLayout(), m_textureSetLayout },
             std::vector<vk::PushConstantRange>{}
         );
         pipelineBuilder.SetAttachmentsFormat(std::vector<vk::Format>{ m_swapchain->GetSurfaceFormat().format }, vk::Format::eUndefined); // no depth attachment
@@ -485,6 +779,59 @@ namespace Felina
             .commandBufferCount = MAX_FRAMES_IN_FLIGHT
         };
         m_commandBuffers = vk::raii::CommandBuffers(m_device->GetDevice(), allocInfo);
+    }
+
+    // Create and store default samplers
+    // - one sampler with repeated wrapping and no filtering
+    // - one sampler with repeated wrapping and bilinear filtering
+    //
+    // Additional notes:
+    // From glTF 2.0 specs: `When texture.sampler is undefined, 
+    // a sampler with repeat wrapping (in both directions) 
+    // and auto filtering MUST be used.` -> any of the above
+    // can be used as a fallback/default sampler
+    void Renderer::CreateSamplers()
+    {
+        std::array<vk::SamplerCreateInfo, MAX_SAMPLERS> createInfos{};
+        createInfos[0] = {
+            .magFilter = vk::Filter::eNearest,
+            .minFilter = vk::Filter::eNearest,
+            .mipmapMode = vk::SamplerMipmapMode::eNearest,
+            .addressModeU = vk::SamplerAddressMode::eRepeat,
+            .addressModeV = vk::SamplerAddressMode::eRepeat,
+            .addressModeW = vk::SamplerAddressMode::eRepeat,
+            .mipLodBias = 0.0f,
+            .anisotropyEnable = vk::False,
+            .maxAnisotropy = 1.0f,
+            .compareEnable = vk::False,
+            .compareOp = vk::CompareOp::eAlways,
+            .minLod = 0.0f,
+            .maxLod = 0.0f,
+            .borderColor = vk::BorderColor::eFloatOpaqueBlack,
+            .unnormalizedCoordinates = vk::False,
+        };
+        createInfos[1] = {
+            .magFilter = vk::Filter::eLinear,
+            .minFilter = vk::Filter::eLinear,
+            .mipmapMode = vk::SamplerMipmapMode::eNearest,
+            .addressModeU = vk::SamplerAddressMode::eRepeat,
+            .addressModeV = vk::SamplerAddressMode::eRepeat,
+            .addressModeW = vk::SamplerAddressMode::eRepeat,
+            .mipLodBias = 0.0f,
+            .anisotropyEnable = vk::False,
+            .maxAnisotropy = 1.0f,
+            .compareEnable = vk::False,
+            .compareOp = vk::CompareOp::eAlways,
+            .minLod = 0.0f,
+            .maxLod = 0.0f,
+            .borderColor = vk::BorderColor::eFloatOpaqueBlack,
+            .unnormalizedCoordinates = vk::False,
+        };
+
+        for (size_t i = 0; i < m_samplers.size(); i++)
+            m_samplers[i].emplace(m_device->GetDevice(), createInfos[i], nullptr);
+
+        LOG("[Renderer] Initialized samplers!");
     }
 
     void Renderer::CreateUniformBuffers()
@@ -520,16 +867,20 @@ namespace Felina
     void Renderer::CreateDescriptorPool()
     {
         // TODO: remove hardcoded number of attachments
-        // NOTE: the pool is created before the G-buffer because it
+        // NOTE: the pool is created before the GBuffer because it
         // uses the pool to allocate the attachments sets
-        uint32_t attachmentsCount = 4 * MAX_FRAMES_IN_FLIGHT;
-        std::array<vk::DescriptorPoolSize, 3> poolSizes {
+        uint32_t attachmentsCount = 3 * MAX_FRAMES_IN_FLIGHT;
+        std::array<vk::DescriptorPoolSize, 5> poolSizes {
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
             vk::DescriptorPoolSize { .type = vk::DescriptorType::eStorageBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT },
             vk::DescriptorPoolSize { 
                 .type = vk::DescriptorType::eCombinedImageSampler,
                 .descriptorCount = attachmentsCount
-            }
+            },
+
+            // These reserved space will be used by ONE descriptor set (see below)
+            vk::DescriptorPoolSize { .type = vk::DescriptorType::eSampledImage, .descriptorCount = MAX_TEXTURES + 1 },
+            vk::DescriptorPoolSize { .type = vk::DescriptorType::eSampler, .descriptorCount = MAX_SAMPLERS }
         };
         vk::DescriptorPoolCreateInfo poolInfo{
             .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
@@ -540,89 +891,44 @@ namespace Felina
         m_descriptorPool = vk::raii::DescriptorPool(m_device->GetDevice(), poolInfo);
     }
 
-    void Renderer::CreateDescriptorSets()
+    // Descriptor sets allocation from the main pool
+    void Renderer::AllocateDescriptorSets()
     {
-        // Descriptor sets allocation from the main pool
+        // Camera
+        std::vector<vk::DescriptorSetLayout> cameraLayouts(MAX_FRAMES_IN_FLIGHT, m_cameraSetLayout);
+        vk::DescriptorSetAllocateInfo cameraAllocInfo{
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = static_cast<uint32_t>(cameraLayouts.size()),
+            .pSetLayouts = cameraLayouts.data()
+        };
+        m_cameraDescriptorSets = m_device->GetDevice().allocateDescriptorSets(cameraAllocInfo);
+
+        // Object
+        std::vector<vk::DescriptorSetLayout> objectLayouts(MAX_FRAMES_IN_FLIGHT, m_objectSetLayout);
+        vk::DescriptorSetAllocateInfo objectAllocInfo{
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = static_cast<uint32_t>(objectLayouts.size()),
+            .pSetLayouts = objectLayouts.data()
+        };
+        m_objectDescriptorSets = m_device->GetDevice().allocateDescriptorSets(objectAllocInfo);
+
+        // Material
+        std::vector<vk::DescriptorSetLayout> materialLayouts(MAX_FRAMES_IN_FLIGHT, m_materialSetLayout);
+        vk::DescriptorSetAllocateInfo materialAllocInfo{
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = static_cast<uint32_t>(materialLayouts.size()),
+            .pSetLayouts = materialLayouts.data()
+        };
+        m_materialDescriptorSets = m_device->GetDevice().allocateDescriptorSets(materialAllocInfo);
+
+        // Texture and sampler
+        vk::DescriptorSetAllocateInfo textureAllocInfo
         {
-            // Camera descriptor sets allocation
-            std::vector<vk::DescriptorSetLayout> cameraLayouts(MAX_FRAMES_IN_FLIGHT, m_cameraSetLayout);
-            vk::DescriptorSetAllocateInfo cameraAllocInfo{
-                .descriptorPool = m_descriptorPool,
-                .descriptorSetCount = static_cast<uint32_t>(cameraLayouts.size()),
-                .pSetLayouts = cameraLayouts.data()
-            };
-            m_cameraDescriptorSets = m_device->GetDevice().allocateDescriptorSets(cameraAllocInfo);
-
-            // Object descriptor sets allocation
-            std::vector<vk::DescriptorSetLayout> objectLayouts(MAX_FRAMES_IN_FLIGHT, m_objectSetLayout);
-            vk::DescriptorSetAllocateInfo objectAllocInfo{
-                .descriptorPool = m_descriptorPool,
-                .descriptorSetCount = static_cast<uint32_t>(objectLayouts.size()),
-                .pSetLayouts = objectLayouts.data()
-            };
-            m_objectDescriptorSets = m_device->GetDevice().allocateDescriptorSets(objectAllocInfo);
-
-            // Material descriptor sets allocation
-            std::vector<vk::DescriptorSetLayout> materialLayouts(MAX_FRAMES_IN_FLIGHT, m_materialSetLayout);
-            vk::DescriptorSetAllocateInfo materialAllocInfo{
-                .descriptorPool = m_descriptorPool,
-                .descriptorSetCount = static_cast<uint32_t>(materialLayouts.size()),
-                .pSetLayouts = materialLayouts.data()
-            };
-            m_materialDescriptorSets = m_device->GetDevice().allocateDescriptorSets(materialAllocInfo);
-        }
-        
-        // Bind the buffers to the corresponding set
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-        {
-            // Camera descriptor set
-            vk::DescriptorBufferInfo cameraUBOInfo{
-                .buffer = m_cameraUBOs[i]->GetHandle(),
-                .offset = 0,
-                .range = sizeof(CameraData)
-            };
-            vk::WriteDescriptorSet cameraWrite{
-                .dstSet = m_cameraDescriptorSets[i],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = vk::DescriptorType::eUniformBuffer,
-                .pBufferInfo = &cameraUBOInfo
-            };
-            m_device->GetDevice().updateDescriptorSets(cameraWrite, {});
-            
-            // Object descriptor set
-            vk::DescriptorBufferInfo objectSSBOInfo{
-                .buffer = m_objectSSBOs[i]->GetHandle(),
-                .offset = 0,
-                .range = sizeof(ObjectData) * MAX_OBJECTS
-            };
-            vk::WriteDescriptorSet objectWrite{
-                .dstSet = m_objectDescriptorSets[i],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = vk::DescriptorType::eStorageBuffer,
-                .pBufferInfo = &objectSSBOInfo
-            };
-            m_device->GetDevice().updateDescriptorSets(objectWrite, {});
-
-            // Material descriptor set
-            vk::DescriptorBufferInfo materialSSBOInfo{
-                .buffer = m_materialSSBOs[i]->GetHandle(),
-                .offset = 0,
-                .range = sizeof(MaterialData) * MAX_MATERIALS
-            };
-            vk::WriteDescriptorSet materialWrite{
-                .dstSet = m_materialDescriptorSets[i],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = vk::DescriptorType::eStorageBuffer,
-                .pBufferInfo = &materialSSBOInfo
-            };
-            m_device->GetDevice().updateDescriptorSets(materialWrite, {});
-        }
+            .descriptorPool = m_descriptorPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &*m_textureSetLayout
+        };
+        m_textureDescriptorSets = std::move(m_device->GetDevice().allocateDescriptorSets(textureAllocInfo).front());
     }
 
     void Renderer::CreateSyncObjects()
@@ -640,29 +946,34 @@ namespace Felina
 
     void Renderer::DrawObject(const Object& obj, uint32_t& idx)
     {
-        // Draw the object
-        // Update push const
-        ObjectPushConst pc{
-            .objectIndex = idx,
-            .materialIndex = m_materialIDToSSBOID[m_currentFrame][obj.GetMaterial()]
-        };
-        m_commandBuffers[m_currentFrame].pushConstants(
-            *m_defGeometryPipelineLayout,
-            vk::ShaderStageFlagBits::eVertex,
-            0,
-            vk::ArrayProxy<const ObjectPushConst>(1, &pc)
-        );
+        // TODO: improve invalid ResourceIDs handling
+        // Skip drawing if the object has no mesh
+        if (obj.GetMesh() != MeshID(-1))
+        {
+            // Draw the object
+            // Update push const
+            ObjectPushConst pc{
+                .objectIndex = idx,
+                .materialIndex = m_materialIDToSSBOID[m_currentFrame][obj.GetMaterial()]
+            };
+            m_commandBuffers[m_currentFrame].pushConstants(
+                *m_defGeometryPipelineLayout,
+                vk::ShaderStageFlagBits::eVertex,
+                0,
+                vk::ArrayProxy<const ObjectPushConst>(1, &pc)
+            );
 
-        // Bind vertex and index buffer
-        auto& mesh = ResourceManager::GetInstance().GetMesh(obj.GetMesh());
-        m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
-        m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
+            // Bind vertex and index buffer
+            auto& mesh = ResourceManager::GetInstance().GetMesh(obj.GetMesh());
+            m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
+            m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
 
-        // Draw call
-        m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
+            // Draw call
+            m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
 
-        // Increment index AFTER drawing the object
-        ++idx;
+            // Increment index AFTER drawing the object
+            ++idx;
+        }
 
         // Iterate through its children
         for (const auto& childPtr : obj.GetChildren())
@@ -755,10 +1066,15 @@ namespace Felina
         );
         m_commandBuffers[m_currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
 
-        // Bind descriptor sets (camera UBO, object SSBO)
+        // Bind descriptor sets (camera UBO, object SSBO, texture and sampler arrays)
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics, m_defGeometryPipelineLayout, 0,
-            { m_cameraDescriptorSets[m_currentFrame], m_objectDescriptorSets[m_currentFrame], m_materialDescriptorSets[m_currentFrame] },
+            {   
+                m_cameraDescriptorSets[m_currentFrame], 
+                m_objectDescriptorSets[m_currentFrame], 
+                m_materialDescriptorSets[m_currentFrame], 
+                m_textureDescriptorSets // shared between frames in flight
+            },
             nullptr
         );
 
@@ -834,7 +1150,7 @@ namespace Felina
         // Bind descriptor sets (camera UBO, G-buffer)
         m_commandBuffers[m_currentFrame].bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics, m_defLightingPipelineLayout, 0,
-            { m_cameraDescriptorSets[m_currentFrame], gBuffer->GetDescriptorSet() }, 
+            { m_cameraDescriptorSets[m_currentFrame], gBuffer->GetDescriptorSet(), m_textureDescriptorSets }, 
             nullptr
         );
 

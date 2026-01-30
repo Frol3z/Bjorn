@@ -9,7 +9,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${ASSETS_SRC_DIR} ${ASSETS_DST_DIR}
     COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/assets.stamp
     DEPENDS ${ASSETS_FILES}
-    COMMENT "Copying assets..."
+    COMMENT "Copying assets into build dir..."
     VERBATIM
 )
 

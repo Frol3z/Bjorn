@@ -2,8 +2,9 @@
 
 namespace Felina
 {
-	Material::Material(glm::vec3 albedo, glm::vec3 specular, glm::vec4 coefficients)
-		: m_albedo(albedo), m_specular(specular), m_coefficients(coefficients)
+	Material::Material(glm::vec3 baseColor, glm::vec4 metallicRoughness, TextureID baseColorTex, TextureID metallicRoughnessTex)
+		: m_baseColor(baseColor), m_metallicRoughness(metallicRoughness), 
+		  m_baseColorTex(baseColorTex), m_metallicRoughnessTex(metallicRoughnessTex)
 	{
 	}
 }

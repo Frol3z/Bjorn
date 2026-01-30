@@ -3,21 +3,21 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <vk_mem_alloc.h>
 
-#include "Image.hpp"
+#include "Texture.hpp"
 
 namespace Felina
 {
-	class Image;
+	class Texture;
 	class Device;
 
 	class GBuffer
 	{
 		public:
-			enum AttachmentType { Albedo = 0, Specular, MaterialInfo, Normal, Depth };
+			enum AttachmentType { BaseColor = 0, MaterialInfo, Normal, Depth };
 			struct Attachment
 			{
 				AttachmentType type;
-				std::unique_ptr<Image> image = nullptr;
+				std::unique_ptr<Texture> image = nullptr;
 			};
 
 			GBuffer(
@@ -40,8 +40,7 @@ namespace Felina
 			);
 
 		private:
-			void CreateAlbedoAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
-			void CreateSpecularAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
+			void CreateBaseColorAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
 			void CreateMaterialInfoAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
 			void CreateNormalAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);
 			void CreateDepthAttachment(const Device& device, VmaAllocationCreateInfo allocCreateInfo);

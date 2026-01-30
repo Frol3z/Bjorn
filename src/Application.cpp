@@ -6,34 +6,104 @@
 #include "Scene.hpp"
 #include "Renderer.hpp"
 #include "GltfLoader.hpp"
+#include "Input.hpp"
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 
-namespace Felina 
+namespace Felina
 {
 	Application::Application(const std::string& name, uint32_t windowWidth, uint32_t windowHeight)
-		: m_name(name)
+		: m_name(name), m_startupWindowWidth(windowWidth), m_startupWindowHeight(windowHeight)
 	{
-		InitGlfw();
-
-		m_window = std::make_unique<Window>(windowWidth, windowHeight, m_name, *this);
-		m_UI = std::make_unique<UI>();
-		m_scene = std::make_unique<Scene>(static_cast<float>(windowWidth), static_cast<float>(windowHeight));
-		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
-
-		InitImGui();
-		InitScene();
 	}
 
 	Application::~Application() = default;
 
+	void Application::Init()
+	{
+		LOG("[Application] Initializing...");
+
+		InitGlfw();
+		m_window = std::make_unique<Window>(m_startupWindowWidth, m_startupWindowHeight, m_name);
+		glfwSetWindowUserPointer(m_window->GetHandle(), this);
+		glfwSetFramebufferSizeCallback(m_window->GetHandle(), Application::FramebufferResizeCallback);
+		glfwSetScrollCallback(m_window->GetHandle(), Application::ScrollCallback);
+
+		m_input = std::make_unique<Input>();
+		m_UI = std::make_unique<UI>();
+		m_scene = std::make_unique<Scene>(static_cast<float>(m_startupWindowWidth), static_cast<float>(m_startupWindowHeight));
+		m_renderer = std::make_unique<Renderer>(*this, *m_window, *m_scene);
+
+		InitImGui();
+		LoadScene();
+
+		LOG("[Application] Done.");
+	}
+
 	void Application::Run()
 	{
-		MainLoop();
-		CleanUp();
+		// MAIN LOOP
+		while (!m_window->ShouldClose()) {
+			glfwPollEvents();
+			Update();
+			m_renderer->DrawFrame();
+		}
+
+		LOG("[Application] Waiting for pending GPU operations to finish...");
+		m_renderer->WaitIdle();
+	}
+
+	void Application::CleanUp()
+	{
+		LOG("[Application] Cleaning up...");
+
+		// Unload all resources
+		LOG("[Application] Unloading resources...");
+		auto& rm = ResourceManager::GetInstance();
+		rm.UnloadAll();
+
+		// ImGui
+		LOG("[Application] Destroying DearImGui context...");
+		ImGui_ImplVulkan_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+
+		// GLFW
+		LOG("[Application] Destroying the window...");
+		m_window.reset();
+		glfwTerminate();
+
+		LOG("[Application] Done.");
+	}
+
+	void Application::FramebufferResizeCallback(GLFWwindow* window, int width, int height)
+	{
+		Application* app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		assert(app != nullptr && "[Application] glfwGetWindowUserPointer hasn't been set.");
+
+		// Update window
+		Window& win = app->GetWindow();
+		win.SetWidth(static_cast<uint32_t>(width));
+		win.SetHeight(static_cast<uint32_t>(height));
+
+		// Update camera viewport
+		Camera& camera = app->GetScene().GetCamera();
+		camera.UpdateProjectionMatrix(static_cast<float>(width), static_cast<float>(height));
+
+		// Signal the renderer
+		app->SignalFramebufferResized();
+	}
+
+	// For a classic vertical mouse-wheel xOffset should be ignored 
+	void Application::ScrollCallback(GLFWwindow* window, double xOffset, double yOffset)
+	{
+		Application* app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		assert(app != nullptr && "[Application] glfwGetWindowUserPointer hasn't been set.");
+
+		app->GetInput().SetMouseScroll(0.35f * yOffset); // WIP
 	}
 
 	void Application::InitGlfw() 
@@ -41,6 +111,7 @@ namespace Felina
 		glfwInit();
 	}
 
+	// NOTE: the renderer must have been initialized before calling this function
 	void Application::InitImGui()
 	{
 		ImGui::CreateContext();
@@ -54,84 +125,59 @@ namespace Felina
 		ImGui_ImplVulkan_Init(&vkInitInfo);
 	}
 
-	void Application::InitScene()
+	void Application::LoadScene(const std::filesystem::path& filepath)
 	{	
-		/*
-		// Load materials
-		auto& rm = ResourceManager::GetInstance();
-		constexpr float ambient = 0.02f;
-		auto mat1 = std::make_unique<Material>(
-			glm::vec3(0.98, 0.1, 0.1), // Albedo
-			glm::vec3(0.1, 0.1, 0.1), // Specular
-			glm::vec4(ambient, 0.8, 0.05, 0.05) // Material info
-		);
-		auto mat2 = std::make_unique<Material>(
-			glm::vec3(0.1, 0.6, 0.7), // Albedo
-			glm::vec3(1.0, 1.0, 1.0), // Specular
-			glm::vec4(ambient, 0.2, 0.8, 0.8) // Material info
-		);
-		auto mat1ID = rm.LoadMaterial(std::move(mat1), "Opaque Material");
-		auto mat2ID = rm.LoadMaterial(std::move(mat2), "Shiny Material");
-		*/
+		// Wait for GPU operations to finish
+		m_renderer->WaitIdle();
 
-		// Load default scene
-		LoadSceneFromGlTF("./assets/default.glb", *m_scene, *m_renderer);
-		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f)); // TODO: include camera in the glTF
+		// Unload previous resources (if a scene was already loaded)
+		m_scene->ClearObjects();
+		ResourceManager::GetInstance().UnloadAll();
+
+		// TODO: I can avoid reloading the skybox each time I reload the scene
+		LOG("[Application] Loading skybox...");
+		m_renderer->LoadSkybox(SKYBOX_DIR);
+		LOG("[Application] Skybox loaded successfully!");
+
+		LOG("[Application] Loading scene from " + filepath.string() + "...");
+		
+		LoadSceneFromGlTF(filepath, *m_scene, *m_renderer);
+		// TODO: include camera in the glTF
+		m_scene->GetCamera().SetPosition(glm::vec3(0.0f, -6.0f, 3.0f));
+
+		// Binding the descriptors to the new textures
+		m_renderer->UpdateDescriptorSets();
+		
+		LOG("[Application] Scene loaded successfully!");
 	}
 
-	void Application::MainLoop() 
+	void Application::Update()
 	{
-		while (!m_window->ShouldClose()) {
-			glfwPollEvents();
-			ProcessInput();
+		// Update user input
+		m_input->Update(*m_window);
 
-			if(glfwGetMouseButton(m_window->GetHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
-				m_scene->RotateCamera(m_mouseDeltaX, m_mouseDeltaY);
-			
-			m_UI->Update(*m_scene);
-			m_renderer->DrawFrame();
+		// Camera control
+		// TODO:
+		// - fix the double sensitivity issue
+		// - expose sensitivity in the UI
+		if (!ImGui::GetIO().WantCaptureMouse)
+		{
+			auto& camera = m_scene->GetCamera();
+			GLFWwindow* win = m_window->GetHandle();
+
+			// Mouse buttons -> Panning and orbiting
+			if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+				camera.Rotate(m_input->mouseDeltaX, m_input->mouseDeltaY);
+			else if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+				camera.Pan(Input::PAN_SENSITIVITY * m_input->mouseDeltaX, Input::PAN_SENSITIVITY * m_input->mouseDeltaY);
+
+			// Mouse scroll-wheel -> Dolly
+			double mouseScroll = m_input->GetMouseScroll();
+			if (mouseScroll != 0.0)
+				camera.Dolly(mouseScroll);
 		}
 
-		// Wait for pending GPU operations to finish
-		m_renderer->WaitIdle();
-	}
-
-	void Application::CleanUp()
-	{
-		// Unload all resources
-		auto& rm = ResourceManager::GetInstance();
-		rm.UnloadAll();
-
-		// ImGui
-		ImGui_ImplVulkan_Shutdown();
-		ImGui_ImplGlfw_Shutdown();
-		ImGui::DestroyContext();
-
-		// GLFW
-		m_window.reset();
-		glfwTerminate();
-	}
-
-	// Process mouse input and updates member variables
-	// m_mouseDeltaX and m_mouseDeltaY
-	void Application::ProcessInput()
-	{
-		// xpos, ypos -> mouse position at frame N
-		// m_mouseX, m_mouseY -> mouse position at frame N-1
-
-		// Poll for mouse position
-		double xpos{};
-		double ypos{};
-		glfwGetCursorPos(m_window->GetHandle(), &xpos, &ypos);
-		xpos /= m_window->GetWidth();
-		ypos /= m_window->GetHeight();
-
-		// Compute delta
-		m_mouseDeltaX = (m_mouseX - xpos) * m_sensitivity;
-		m_mouseDeltaY = (m_mouseY - ypos) * m_sensitivity;
-
-		// Update stored mouse position
-		m_mouseX = xpos;
-		m_mouseY = ypos;
+		// Update UI
+		m_UI->Update(*m_scene, *this);
 	}
 }

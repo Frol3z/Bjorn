@@ -32,7 +32,7 @@ namespace Felina
         CreateImageViews();
     }
 
-    std::pair<vk::Result, uint32_t> Swapchain::AcquireNextImage(const vk::Semaphore& s)
+    vk::ResultValue<uint32_t> Swapchain::AcquireNextImage(const vk::Semaphore& s)
     {
         return m_swapchain.acquireNextImage(UINT64_MAX, s, nullptr);
     }

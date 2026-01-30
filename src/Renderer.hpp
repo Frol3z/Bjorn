@@ -2,8 +2,10 @@
 
 #include <vulkan/vulkan_raii.hpp>
 #include <vk_mem_alloc.h>
-
 #include <glm/glm.hpp>
+
+#include <optional>
+#include <filesystem>
 
 // Required for MaterialID and MeshID definitions
 #include "ResourceManager.hpp"
@@ -37,9 +39,11 @@ namespace Felina
 
 			struct MaterialData
 			{
-				glm::vec3 albedo;
-				glm::vec3 specular;
+				glm::vec3 baseColor;
 				glm::vec4 materialInfo;
+
+				uint32_t baseColorTex;
+				uint32_t materialInfoTex;
 			};
 
 			struct ObjectData
@@ -71,7 +75,11 @@ namespace Felina
 			// - objects SSBO
 			// - materials SSBO
 			// - GBuffer (see GBuffer class)
-			static constexpr uint32_t MAX_DESCRIPTOR_SETS = 4;
+			// - texture and sampler arrays
+			static constexpr uint32_t MAX_DESCRIPTOR_SETS = 5;
+
+			static constexpr uint32_t MAX_SAMPLERS = 2;
+			static constexpr uint32_t MAX_TEXTURES = 30;
 
 		public:
 			Renderer(Application& app, const Window& window, const Scene& scene);
@@ -80,13 +88,18 @@ namespace Felina
 			void DrawFrame();
 			void WaitIdle();
 			void LoadMesh(Mesh& mesh);
+			void LoadTexture(const Texture& texture, const void* rawImageData, size_t rawImageSize);
+			void LoadSkybox(const std::filesystem::path& folderPath);
+			void UpdateDescriptorSets(); 
+
+			const Device& GetDevice() const;
 
 			// Dear ImGui
 			ImGui_ImplVulkan_InitInfo GetImGuiInitInfo();
 			void DrawImGuiFrame(ImDrawData* drawData);
 
 		private:
-			void UpdateFrameData();
+			void SetupFrameData();
 			void UpdateOnFramebufferResized();
 
 			void CreateInstance();
@@ -99,13 +112,14 @@ namespace Felina
 			void CreatePipeline();
 			void CreateCommandPool();
 			void CreateCommandBuffer();
+			void CreateSamplers();
 			void CreateUniformBuffers();
 			void CreateDescriptorPool();
-			void CreateDescriptorSets();
+			void AllocateDescriptorSets();
 			void CreateSyncObjects();
 
 			void DrawObject(const Object& obj, uint32_t& idx);
-			void RecordCommandBuffer(uint32_t imageIndex);
+			void RecordCommandBuffer(uint32_t imageIndex); // 2 passes
 			void TransitionImageLayout(
 				vk::Image image,
 				vk::Format imageFormat,
@@ -117,13 +131,17 @@ namespace Felina
 				vk::PipelineStageFlags2 dstStageMask
 			);
 
-			Application& m_app; // Need to be able to modify the framebufferResized boolean
+			// NOTE: non-const reference because
+			// Application::IsFramebufferResized cannot be const
+			Application& m_app;
 			const Window& m_window;
 			const Scene& m_scene;
 
 			uint32_t m_currentFrame = 0;
 			// Look-up table to match the Material ID to the physical GPU storage buffer index
 			std::array<std::unordered_map<MaterialID, uint32_t>, MAX_FRAMES_IN_FLIGHT> m_materialIDToSSBOID;
+			// Look-up table to match the Texture ID to the GPU texture array index
+			std::array<std::unordered_map<TextureID, uint32_t>, MAX_FRAMES_IN_FLIGHT> m_textureIDToArrayID;
 
 			// Dear ImGui custom vertex shader (temporary fix for colors issue)
 			std::vector<char> m_imGuiCustomVertShaderCode;
@@ -141,6 +159,7 @@ namespace Felina
 			vk::raii::DescriptorSetLayout m_cameraSetLayout = nullptr;
 			vk::raii::DescriptorSetLayout m_materialSetLayout = nullptr;
 			vk::raii::DescriptorSetLayout m_objectSetLayout = nullptr;
+			vk::raii::DescriptorSetLayout m_textureSetLayout = nullptr;
 			vk::PushConstantRange m_objectPushConst;
 
 			vk::raii::PipelineLayout m_defGeometryPipelineLayout = nullptr;
@@ -150,12 +169,16 @@ namespace Felina
 
 			std::vector<vk::raii::CommandBuffer> m_commandBuffers;
 
+			std::array<std::optional<vk::raii::Sampler>, MAX_SAMPLERS> m_samplers;
+
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_cameraUBOs;
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_objectSSBOs;
 			std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> m_materialSSBOs;
 			std::vector<vk::raii::DescriptorSet> m_cameraDescriptorSets;
 			std::vector<vk::raii::DescriptorSet> m_objectDescriptorSets;
 			std::vector<vk::raii::DescriptorSet> m_materialDescriptorSets;
+			// Just one shared between frames because it will be read-only
+			vk::raii::DescriptorSet m_textureDescriptorSets = nullptr;
 
 			std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
 			std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
