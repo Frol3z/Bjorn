@@ -1,6 +1,7 @@
 #include "GltfLoader.hpp"
 
 #include "tiny_gltf.h"
+#include <glm/gtc/type_ptr.hpp>
 
 #include "Scene.hpp"
 #include "Renderer.hpp"
@@ -213,17 +214,23 @@ namespace Felina
 		const std::unordered_map<int, MeshID>& meshes, const std::unordered_map<int, MaterialID>& materials
 	)
 	{
+		MeshID meshId{};
+		MaterialID materialId{};
 		if (node.mesh == -1)
-			throw std::runtime_error("[GltfLoader] " + node.name + " has no mesh");
-
-		// Retrieve resource IDs
-		MeshID meshId = meshes.at(node.mesh);
-		const tinygltf::Mesh& mesh = model.meshes[node.mesh];
-
-		// Here it is assumed that if a mesh has multiple primitives,
-		// they'll be all rendered with the material used by the first one
-		// TODO: add submeshes support
-		MaterialID materialId = materials.at(mesh.primitives[0].material);
+		{
+			meshId = -1;
+			materialId = -1;
+		}
+		else
+		{
+			meshId = meshes.at(node.mesh);
+			const tinygltf::Mesh& mesh = model.meshes[node.mesh];
+			
+			// Here it is assumed that if a mesh has multiple primitives,
+			// they'll be all rendered with the material used by the first one
+			// TODO: add submeshes support
+			materialId = materials.at(mesh.primitives[0].material);
+		}
 
 		// Object creation
 		std::unique_ptr<Object> obj = std::make_unique<Object>(node.name, meshId, materialId, parent);
@@ -232,9 +239,8 @@ namespace Felina
 		// Transform -> see p.18 of glTF specs
 		if (node.matrix.size() == 16) // if matrix is specified it will have priority
 		{
-			glm::mat4 mat;
-			for (int i = 0; i < 16; i++)
-				mat[i / 4][i % 4] = static_cast<float>(node.matrix[i]);
+			LOG("Matrix found!");
+			glm::mat4 mat = glm::make_mat4(node.matrix.data());
 			obj->SetModelMatrix(mat);
 		}
 		else

@@ -147,7 +147,7 @@ float4 main(VertexOutput inVert) : SV_TARGET0
     float3 specularBRDF = fresnel * D(alphaSquared, nDotH) * G(alphaSquared, nDotL, nDotV);
     float3 combinedBRDF = (float3(1.0, 1.0, 1.0) - fresnel) * diffuseBRDF(baseColor, metalness) + specularBRDF;
     float3 directLighting = LIGHT_COL * combinedBRDF * nDotL;
-    // TODO: add environment mapping instead of ambient
     
+    // TODO: add environment mapping instead of ambient
     return float4(directLighting + (1.0 - metalness) * ambient * baseColor, 1.0);
 }

@@ -79,7 +79,7 @@ namespace Felina
 			static constexpr uint32_t MAX_DESCRIPTOR_SETS = 5;
 
 			static constexpr uint32_t MAX_SAMPLERS = 2;
-			static constexpr uint32_t MAX_TEXTURES = 10;
+			static constexpr uint32_t MAX_TEXTURES = 30;
 
 		public:
 			Renderer(Application& app, const Window& window, const Scene& scene);

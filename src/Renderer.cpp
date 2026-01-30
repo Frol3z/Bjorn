@@ -420,19 +420,24 @@ namespace Felina
         ImGui_ImplVulkan_RenderDrawData(drawData, *m_commandBuffers[m_currentFrame]);
     }
 
-    static void UpdateObject(const Object& obj, std::vector<Renderer::ObjectData>& objectDatas)
+    static void UpdateObject(const Object& obj, glm::mat4 parentModelMatrix, std::vector<Renderer::ObjectData>& objectDatas)
     {
         // Add current object data
-        objectDatas.emplace_back(Renderer::ObjectData{
-            .model = obj.GetModelMatrix(),
-            .normal = obj.GetNormalMatrix()
-        });
+        glm::mat4 modelMatrix = parentModelMatrix * obj.GetModelMatrix();
+        if (obj.GetMesh() != MeshID(-1))
+        {
+            objectDatas.emplace_back(Renderer::ObjectData{
+                .model = modelMatrix,
+                .normal = glm::transpose(glm::inverse(glm::mat3(modelMatrix)))
+                // .normal = glm::mat3(modelMatrix) (uniform scaling ONLY assumption)
+            });
+        }
 
         // Iterate through its children
         for (const auto& childPtr : obj.GetChildren())
         {
             const Object& child = *childPtr;
-            UpdateObject(child, objectDatas);
+            UpdateObject(child, modelMatrix, objectDatas);
         }
     }
 
@@ -452,7 +457,7 @@ namespace Felina
         for (const auto& objPtr : objects)
         {
             const Object& obj = *objPtr;
-            UpdateObject(obj, objectDatas);
+            UpdateObject(obj, glm::mat4(1.0f), objectDatas);
         }
         m_objectSSBOs[m_currentFrame]->LoadData(objectDatas.data(), objectDatas.size() * sizeof(ObjectData));
         
@@ -941,29 +946,34 @@ namespace Felina
 
     void Renderer::DrawObject(const Object& obj, uint32_t& idx)
     {
-        // Draw the object
-        // Update push const
-        ObjectPushConst pc{
-            .objectIndex = idx,
-            .materialIndex = m_materialIDToSSBOID[m_currentFrame][obj.GetMaterial()]
-        };
-        m_commandBuffers[m_currentFrame].pushConstants(
-            *m_defGeometryPipelineLayout,
-            vk::ShaderStageFlagBits::eVertex,
-            0,
-            vk::ArrayProxy<const ObjectPushConst>(1, &pc)
-        );
+        // TODO: improve invalid ResourceIDs handling
+        // Skip drawing if the object has no mesh
+        if (obj.GetMesh() != MeshID(-1))
+        {
+            // Draw the object
+            // Update push const
+            ObjectPushConst pc{
+                .objectIndex = idx,
+                .materialIndex = m_materialIDToSSBOID[m_currentFrame][obj.GetMaterial()]
+            };
+            m_commandBuffers[m_currentFrame].pushConstants(
+                *m_defGeometryPipelineLayout,
+                vk::ShaderStageFlagBits::eVertex,
+                0,
+                vk::ArrayProxy<const ObjectPushConst>(1, &pc)
+            );
 
-        // Bind vertex and index buffer
-        auto& mesh = ResourceManager::GetInstance().GetMesh(obj.GetMesh());
-        m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
-        m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
+            // Bind vertex and index buffer
+            auto& mesh = ResourceManager::GetInstance().GetMesh(obj.GetMesh());
+            m_commandBuffers[m_currentFrame].bindVertexBuffers(0, mesh.GetVertexBuffer().GetHandle(), { 0 });
+            m_commandBuffers[m_currentFrame].bindIndexBuffer(mesh.GetIndexBuffer().GetHandle(), 0, mesh.GetIndexType());
 
-        // Draw call
-        m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
+            // Draw call
+            m_commandBuffers[m_currentFrame].drawIndexed(mesh.GetIndexBufferSize(), 1, 0, 0, 0);
 
-        // Increment index AFTER drawing the object
-        ++idx;
+            // Increment index AFTER drawing the object
+            ++idx;
+        }
 
         // Iterate through its children
         for (const auto& childPtr : obj.GetChildren())

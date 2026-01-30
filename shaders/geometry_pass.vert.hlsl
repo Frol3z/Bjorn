@@ -48,6 +48,7 @@ VertexOutput main(VertexInput input, uint vertexId : SV_VertexID)
     VertexOutput output;
     float4x4 model = objectBuffer[pushConsts.objectIndex].model;
     float3x3 normalMatrix = objectBuffer[pushConsts.objectIndex].normal;
+    
     output.position = mul(cameraData.proj, mul(cameraData.view, mul(model, float4(input.position, 1.0)))); // canonical view-volume
     output.normal = normalize(mul(normalMatrix, input.normal)); // world-space normal
     output.uv = input.uv;

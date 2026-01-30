@@ -129,50 +129,53 @@ namespace Felina
 			// Mesh
 			auto& rm = ResourceManager::GetInstance();
 			MeshID selectedMesh = m_hierarchySelection->GetMesh();
-			if (ImGui::BeginCombo("Mesh", rm.GetMeshName(selectedMesh).c_str(), 0))
+			if (selectedMesh != MeshID(-1))
 			{
-				static ImGuiTextFilter filter;
-				if (ImGui::IsWindowAppearing())
+				if (ImGui::BeginCombo("Mesh", rm.GetMeshName(selectedMesh).c_str(), 0))
 				{
-					ImGui::SetKeyboardFocusHere();
-					filter.Clear();
-				}
-				ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
-				filter.Draw("##Filter", -FLT_MIN);
+					static ImGuiTextFilter filter;
+					if (ImGui::IsWindowAppearing())
+					{
+						ImGui::SetKeyboardFocusHere();
+						filter.Clear();
+					}
+					ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
+					filter.Draw("##Filter", -FLT_MIN);
 
-				for (auto& [id, mesh] : rm.GetMeshes())
-				{
-					auto& name = rm.GetMeshName(id);
-					const bool isSelected = (id == selectedMesh);
-					if (filter.PassFilter(name.c_str()))
-						if (ImGui::Selectable(name.c_str(), isSelected))
-							m_hierarchySelection->SetMesh(id);
+					for (auto& [id, mesh] : rm.GetMeshes())
+					{
+						auto& name = rm.GetMeshName(id);
+						const bool isSelected = (id == selectedMesh);
+						if (filter.PassFilter(name.c_str()))
+							if (ImGui::Selectable(name.c_str(), isSelected))
+								m_hierarchySelection->SetMesh(id);
+					}
+					ImGui::EndCombo();
 				}
-				ImGui::EndCombo();
-			}
 
-			// Material
-			MaterialID selectedMaterial = m_hierarchySelection->GetMaterial();
-			if (ImGui::BeginCombo("Material", rm.GetMaterialName(selectedMaterial).c_str(), 0))
-			{
-				static ImGuiTextFilter filter;
-				if (ImGui::IsWindowAppearing())
+				// Material
+				MaterialID selectedMaterial = m_hierarchySelection->GetMaterial();
+				if (ImGui::BeginCombo("Material", rm.GetMaterialName(selectedMaterial).c_str(), 0))
 				{
-					ImGui::SetKeyboardFocusHere();
-					filter.Clear();
-				}
-				ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
-				filter.Draw("##Filter", -FLT_MIN);
+					static ImGuiTextFilter filter;
+					if (ImGui::IsWindowAppearing())
+					{
+						ImGui::SetKeyboardFocusHere();
+						filter.Clear();
+					}
+					ImGui::SetNextItemShortcut(ImGuiMod_Ctrl | ImGuiKey_F);
+					filter.Draw("##Filter", -FLT_MIN);
 
-				for (auto& [id, material] : rm.GetMaterials())
-				{
-					auto& name = rm.GetMaterialName(id);
-					const bool isSelected = (id == selectedMaterial);
-					if (filter.PassFilter(name.c_str()))
-						if (ImGui::Selectable(name.c_str(), isSelected))
-							m_hierarchySelection->SetMaterial(id);
+					for (auto& [id, material] : rm.GetMaterials())
+					{
+						auto& name = rm.GetMaterialName(id);
+						const bool isSelected = (id == selectedMaterial);
+						if (filter.PassFilter(name.c_str()))
+							if (ImGui::Selectable(name.c_str(), isSelected))
+								m_hierarchySelection->SetMaterial(id);
+					}
+					ImGui::EndCombo();
 				}
-				ImGui::EndCombo();
 			}
 		}
 		ImGui::End();
