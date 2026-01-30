@@ -15,13 +15,12 @@ Currently I'm working on adding texture supports on my materials.
 # Features
 - simple user interface
 - full deferred rendering pipeline
-- material system using Blinn-Phong lighting model
+- PBR material system
 - texture support
 - glTF scene loading
 # Roadmap
 ## Short term
 - multiple lights
-- PBR materials
 - improve UX
 ## Long term
 - cascaded shadow maps
@@ -77,9 +76,9 @@ cmake ..
 | Camera                |    0    |  0  |  Y  |  N  |
 | Objects               |    0    |  1  |  Y  |  N  |
 | Materials             |    0    |  2  |  N  |  Y  |
-| Samplers              |    0    |  3  |  N  |  Y  | *
-| Textures              |    1    |  3  |  N  |  Y  | *
-| Skybox                |    2    |  3  |  N  |  Y  | *
+| Samplers              |    0    |  3  |  N  |  Y  |
+| Textures              |    1    |  3  |  N  |  Y  |
+| Skybox                |    2    |  3  |  N  |  Y  |
 
 | Push Constants | VS  | FS  |
 | -------------- | --- | --- |
